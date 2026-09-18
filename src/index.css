@@ -1,0 +1,48 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'DM Sans', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --color-surface: #f4f5f7;
+  --color-surface-elevated: #ffffff;
+  --color-border: #e2e5ec;
+  --color-muted: #6b7280;
+  --color-foreground: #111827;
+  --color-accent: #059669;
+  --color-accent-dim: #047857;
+}
+
+@layer base {
+  html {
+    @apply antialiased;
+  }
+  body {
+    @apply m-0 min-h-svh bg-surface text-foreground font-sans;
+  }
+  #root {
+    @apply min-h-svh;
+  }
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+.checkerboard {
+  background-color: #eceef2;
+  background-image:
+    linear-gradient(45deg, #dfe2e8 25%, transparent 25%),
+    linear-gradient(-45deg, #dfe2e8 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #dfe2e8 75%),
+    linear-gradient(-45deg, transparent 75%, #dfe2e8 75%);
+  background-size: 16px 16px;
+  background-position:
+    0 0,
+    0 8px,
+    8px -8px,
+    -8px 0;
+}
