@@ -1,10 +1,13 @@
 import type { LoadedImageItem } from '../core/types'
 import { assetBaseName } from '../lib/assetName'
 import { ScrollArea } from './ScrollArea'
+import { Spinner } from './Spinner'
 
 type Props = {
   items: LoadedImageItem[]
   selectedId: string | null
+  processingAssetId: string | null
+  batchProcessing: boolean
   onSelect: (id: string) => void
   onRemove: (id: string) => void
 }
@@ -39,12 +42,14 @@ function TrashIcon({ size = 14 }: { size?: number }) {
 function AssetRow({
   item,
   active,
+  isProcessing,
   onSelect,
   onRemove,
   layout,
 }: {
   item: LoadedImageItem
   active: boolean
+  isProcessing: boolean
   onSelect: () => void
   onRemove: () => void
   layout: 'row' | 'column'
@@ -68,8 +73,9 @@ function AssetRow({
           type="button"
           onClick={onSelect}
           title={item.name}
-          className={`whitespace-nowrap px-2.5 py-2 text-left text-[10px] font-mono leading-tight transition-colors ${layout === 'column' ? 'min-w-0 flex-1' : ''} ${selectClass} hover:bg-black/[0.03]`}
+          className={`flex min-w-0 items-center gap-1.5 px-2.5 py-2 text-left text-[10px] font-mono leading-tight transition-colors ${layout === 'column' ? 'flex-1' : ''} whitespace-nowrap ${selectClass} hover:bg-black/[0.03]`}
         >
+          {isProcessing ? <Spinner size={10} /> : null}
           {label}
         </button>
         <button
@@ -86,7 +92,14 @@ function AssetRow({
   )
 }
 
-export function AssetList({ items, selectedId, onSelect, onRemove }: Props) {
+export function AssetList({
+  items,
+  selectedId,
+  processingAssetId,
+  batchProcessing,
+  onSelect,
+  onRemove,
+}: Props) {
   if (items.length === 0) return null
 
   return (
@@ -105,6 +118,7 @@ export function AssetList({ items, selectedId, onSelect, onRemove }: Props) {
               key={item.id}
               item={item}
               active={selectedId === item.id}
+              isProcessing={batchProcessing && processingAssetId === item.id}
               layout="row"
               onSelect={() => onSelect(item.id)}
               onRemove={() => onRemove(item.id)}
@@ -120,6 +134,7 @@ export function AssetList({ items, selectedId, onSelect, onRemove }: Props) {
               key={item.id}
               item={item}
               active={selectedId === item.id}
+              isProcessing={batchProcessing && processingAssetId === item.id}
               layout="column"
               onSelect={() => onSelect(item.id)}
               onRemove={() => onRemove(item.id)}

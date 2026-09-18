@@ -1,4 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react'
+import { formatSizeKb } from '../lib/formatSize'
+import { Spinner } from './Spinner'
 
 type Props = {
   beforeUrl: string | null
@@ -6,6 +8,8 @@ type Props = {
   fileName: string | null
   width: number
   height: number
+  inputBytes: number
+  outputBytes: number | null
   processing: boolean
 }
 
@@ -35,7 +39,7 @@ function PreviewFrame({
         {label}
       </figcaption>
       <div
-        className="checkerboard mx-auto max-w-full overflow-hidden rounded-md border border-border"
+        className="checkerboard relative mx-auto max-w-full overflow-hidden rounded-md border border-border"
         style={frameStyle}
       >
         <div className="flex size-full items-center justify-center">{children}</div>
@@ -50,21 +54,31 @@ export function PreviewPanel({
   fileName,
   width,
   height,
+  inputBytes,
+  outputBytes,
   processing,
 }: Props) {
   if (!beforeUrl || width <= 0 || height <= 0) {
     return null
   }
 
-  const meta = fileName ? `${fileName} · ${width}×${height}` : `${width}×${height}`
+  const sizeMeta =
+    outputBytes != null
+      ? `${formatSizeKb(inputBytes)} → ${formatSizeKb(outputBytes)}`
+      : formatSizeKb(inputBytes)
+
+  const meta = fileName
+    ? `${fileName} · ${width}×${height} · ${sizeMeta}`
+    : `${width}×${height} · ${sizeMeta}`
+
   const frameStyle = previewFrameStyle(width, height)
 
   return (
     <div className="rounded-lg border border-border bg-surface-elevated/50 p-2">
-      <div className="mb-1.5 flex items-center gap-2 text-[10px] text-muted min-w-0">
+      <div className="mb-1.5 flex min-w-0 items-center gap-2 text-[10px] text-muted">
         <span className="shrink-0 font-medium text-muted">Preview</span>
         <span className="truncate font-mono">{meta}</span>
-        {processing ? <span className="shrink-0 text-accent">…</span> : null}
+        {processing ? <Spinner size={12} /> : null}
       </div>
 
       <div className="grid grid-cols-2 gap-2">
@@ -77,20 +91,33 @@ export function PreviewPanel({
             height={height}
           />
         </PreviewFrame>
-        <PreviewFrame
-          label={processing ? 'Result …' : 'Result'}
-          frameStyle={frameStyle}
-        >
+        <PreviewFrame label="Result" frameStyle={frameStyle}>
           {afterUrl ? (
-            <img
-              src={afterUrl}
-              alt="After"
-              className="size-full object-contain"
-              width={width}
-              height={height}
-            />
+            <>
+              <img
+                src={afterUrl}
+                alt="After"
+                className={`size-full object-contain ${processing ? 'opacity-40' : ''}`}
+                width={width}
+                height={height}
+              />
+              {processing ? (
+                <div
+                  className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-surface/60"
+                  aria-busy="true"
+                >
+                  <Spinner size={22} />
+                  <span className="text-[10px] font-medium text-foreground">
+                    Processing…
+                  </span>
+                </div>
+              ) : null}
+            </>
           ) : processing ? (
-            <span className="text-[10px] text-muted">…</span>
+            <div className="flex flex-col items-center justify-center gap-2 py-6">
+              <Spinner size={22} />
+              <span className="text-[10px] text-muted">Processing…</span>
+            </div>
           ) : null}
         </PreviewFrame>
       </div>

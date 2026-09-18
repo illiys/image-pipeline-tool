@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AssetList } from './components/AssetList'
+import { Spinner } from './components/Spinner'
 import { FileDropzone } from './components/FileDropzone'
 import { ModuleCard } from './components/ModuleCard'
 import { PreviewPanel } from './components/PreviewPanel'
@@ -33,6 +34,8 @@ function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [processed, setProcessed] = useState<ProcessedItem[]>([])
   const [processing, setProcessing] = useState(false)
+  const [processingAssetId, setProcessingAssetId] = useState<string | null>(null)
+  const [processProgress, setProcessProgress] = useState({ done: 0, total: 0 })
   const [error, setError] = useState<string | null>(null)
 
   const debouncedRuntime = useDebouncedValue(runtime, 120)
@@ -95,28 +98,36 @@ function App() {
 
     let cancelled = false
     setProcessing(true)
+    setProcessingAssetId(null)
+    setProcessProgress({ done: 0, total: loaded.length })
     setError(null)
 
     void (async () => {
       try {
-        const next: ProcessedItem[] = []
+        let done = 0
         for (const item of loaded) {
           if (cancelled) return
+          setProcessingAssetId(item.id)
           const result = await processOne(item, modules, debouncedRuntime)
-          next.push(result)
+          if (cancelled) {
+            revokeProcessedItem(result)
+            return
+          }
+          done += 1
+          setProcessProgress({ done, total: loaded.length })
+          setProcessed((prev) => {
+            const old = prev.find((p) => p.id === item.id)
+            if (old) revokeProcessedItem(old)
+            return [...prev.filter((p) => p.id !== item.id), result]
+          })
         }
-        if (cancelled) {
-          revokeProcessed(next)
-          return
-        }
-        setProcessed((prev) => {
-          revokeProcessed(prev)
-          return next
-        })
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Processing failed')
       } finally {
-        if (!cancelled) setProcessing(false)
+        if (!cancelled) {
+          setProcessing(false)
+          setProcessingAssetId(null)
+        }
       }
     })()
 
@@ -148,6 +159,14 @@ function App() {
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
         </select>
+        {processing && processProgress.total > 0 ? (
+          <span className="flex items-center gap-1.5 text-[10px] text-muted">
+            <Spinner size={12} />
+            <span className="font-mono tabular-nums">
+              {processProgress.done}/{processProgress.total}
+            </span>
+          </span>
+        ) : null}
         <button
           type="button"
           disabled={!selectedProcessed || processing}
@@ -183,6 +202,8 @@ function App() {
                 <AssetList
                   items={loaded}
                   selectedId={selected.id}
+                  processingAssetId={processingAssetId}
+                  batchProcessing={processing}
                   onSelect={setSelectedId}
                   onRemove={removeAsset}
                 />
@@ -193,7 +214,9 @@ function App() {
                 fileName={selected.name}
                 width={selected.width}
                 height={selected.height}
-                processing={processing}
+                inputBytes={selected.file.size}
+                outputBytes={selectedProcessed?.blob.size ?? null}
+                processing={processing && processingAssetId === selected.id}
               />
             </div>
           ) : null}

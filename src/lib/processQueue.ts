@@ -9,6 +9,7 @@ import type {
   LoadedImageItem,
   ProcessedItem,
 } from '../core/types'
+import { optimizePngBlob } from './optimizePng'
 
 export async function loadFilesAsItems(files: File[]): Promise<LoadedImageItem[]> {
   const items: LoadedImageItem[] = []
@@ -39,7 +40,8 @@ export async function processOne(
     height: item.height,
     fileName: item.name,
   })
-  const blob = await canvasToBlob(output, 'image/png')
+  const rawBlob = await canvasToBlob(output, 'image/png')
+  const blob = await optimizePngBlob(rawBlob)
   const previewUrl = URL.createObjectURL(blob)
   return {
     id: item.id,

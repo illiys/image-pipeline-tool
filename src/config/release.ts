@@ -2,7 +2,7 @@
  * Product version and enabled pipeline modules per release.
  * For a new release: duplicate the block, change enabledModuleIds.
  */
-export const APP_VERSION = '1.0.0'
+export const APP_VERSION = '1.0.1'
 
 export type ReleaseConfig = {
   version: string
@@ -12,7 +12,7 @@ export type ReleaseConfig = {
 
 export const releases: ReleaseConfig[] = [
   {
-    version: '1.0.0',
+    version: '1.0.1',
     label: 'Symbol blur',
     enabledModuleIds: ['vertical-center-squeeze', 'motion-blur'],
   },
