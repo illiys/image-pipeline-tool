@@ -25,9 +25,17 @@ Import the repo, build: `npm run build`, output: `dist`.
 
 ### GitHub Pages
 
-1. Set `base: '/<repo-name>/'` in `vite.config.ts`.
-2. Run `npm run build`.
-3. Publish `dist` (Actions or `gh-pages` branch).
+Live URL: **https://illiys.github.io/image-pipeline-tool/**
+
+1. Repo **Settings → Pages → Build and deployment**: source **GitHub Actions** (not “Deploy from branch” on `/`).
+2. Push to `main` — workflow `.github/workflows/deploy-pages.yml` builds `dist` and deploys it.
+
+Local preview of the production build:
+
+```bash
+npm run build
+npx vite preview --base /image-pipeline-tool/
+```
 
 ## Add a module
 
