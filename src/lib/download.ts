@@ -10,7 +10,7 @@ export function downloadBlob(blob: Blob, fileName: string) {
   URL.revokeObjectURL(url)
 }
 
-export async function downloadAllAsZip(items: ProcessedItem[], zipName = 'blur.zip') {
+export async function downloadAllAsZip(items: ProcessedItem[], zipName: string) {
   const zip = new JSZip()
   for (const item of items) {
     zip.file(item.name, item.blob)

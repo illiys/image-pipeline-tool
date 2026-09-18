@@ -6,21 +6,37 @@ type Props = {
   beforeUrl: string | null
   afterUrl: string | null
   fileName: string | null
-  width: number
-  height: number
+  inputWidth: number
+  inputHeight: number
+  outputWidth: number | null
+  outputHeight: number | null
   inputBytes: number
   outputBytes: number | null
   processing: boolean
+  /** Hide result image for this asset while it is being reprocessed */
+  reprocessingSelected: boolean
 }
 
 const PREVIEW_MAX_HEIGHT = '42vh'
 
-function previewFrameStyle(imageWidth: number, imageHeight: number): CSSProperties {
+/** Fits large originals in the preview area (Original + blur result at same size). */
+function adaptiveFrameStyle(imageWidth: number, imageHeight: number): CSSProperties {
   return {
     aspectRatio: `${imageWidth} / ${imageHeight}`,
     width: `min(100%, calc(${PREVIEW_MAX_HEIGHT} * ${imageWidth} / ${imageHeight}))`,
     height: 'auto',
     maxWidth: '100%',
+  }
+}
+
+/** Thumbnail / smaller export at true pixel size. */
+function exportFrameStyle(imageWidth: number, imageHeight: number): CSSProperties {
+  return {
+    width: `${imageWidth}px`,
+    height: `${imageHeight}px`,
+    maxWidth: '100%',
+    maxHeight: PREVIEW_MAX_HEIGHT,
+    aspectRatio: `${imageWidth} / ${imageHeight}`,
   }
 }
 
@@ -52,26 +68,41 @@ export function PreviewPanel({
   beforeUrl,
   afterUrl,
   fileName,
-  width,
-  height,
+  inputWidth,
+  inputHeight,
+  outputWidth,
+  outputHeight,
   inputBytes,
   outputBytes,
   processing,
+  reprocessingSelected,
 }: Props) {
-  if (!beforeUrl || width <= 0 || height <= 0) {
+  if (!beforeUrl || inputWidth <= 0 || inputHeight <= 0) {
     return null
   }
 
+  const hasOutput = outputWidth != null && outputHeight != null
+  const outputMatchesInput =
+    hasOutput && outputWidth === inputWidth && outputHeight === inputHeight
+
+  const outW = outputWidth ?? inputWidth
+  const outH = outputHeight ?? inputHeight
+
   const sizeMeta =
-    outputBytes != null
-      ? `${formatSizeKb(inputBytes)} → ${formatSizeKb(outputBytes)}`
-      : formatSizeKb(inputBytes)
+    hasOutput && outputBytes != null
+      ? `${formatSizeKb(inputBytes)} · ${inputWidth}×${inputHeight} → ${outputWidth}×${outputHeight} · ${formatSizeKb(outputBytes)}`
+      : `${formatSizeKb(inputBytes)} · ${inputWidth}×${inputHeight}`
 
-  const meta = fileName
-    ? `${fileName} · ${width}×${height} · ${sizeMeta}`
-    : `${width}×${height} · ${sizeMeta}`
+  const meta = fileName ? `${fileName} · ${sizeMeta}` : sizeMeta
 
-  const frameStyle = previewFrameStyle(width, height)
+  const originalFrame = adaptiveFrameStyle(inputWidth, inputHeight)
+  const resultUsesInputFrame = !hasOutput || outputMatchesInput
+  const resultFrame = resultUsesInputFrame
+    ? adaptiveFrameStyle(inputWidth, inputHeight)
+    : exportFrameStyle(outW, outH)
+
+  const showResultImage =
+    afterUrl != null && hasOutput && !reprocessingSelected
 
   return (
     <div className="rounded-lg border border-border bg-surface-elevated/50 p-2">
@@ -81,39 +112,29 @@ export function PreviewPanel({
         {processing ? <Spinner size={12} /> : null}
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <PreviewFrame label="Original" frameStyle={frameStyle}>
+      <div className="grid grid-cols-2 items-start gap-2">
+        <PreviewFrame label="Original" frameStyle={originalFrame}>
           <img
             src={beforeUrl}
             alt="Before"
             className="size-full object-contain"
-            width={width}
-            height={height}
+            width={inputWidth}
+            height={inputHeight}
           />
         </PreviewFrame>
-        <PreviewFrame label="Result" frameStyle={frameStyle}>
-          {afterUrl ? (
-            <>
-              <img
-                src={afterUrl}
-                alt="After"
-                className={`size-full object-contain ${processing ? 'opacity-40' : ''}`}
-                width={width}
-                height={height}
-              />
-              {processing ? (
-                <div
-                  className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-surface/60"
-                  aria-busy="true"
-                >
-                  <Spinner size={22} />
-                  <span className="text-[10px] font-medium text-foreground">
-                    Processing…
-                  </span>
-                </div>
-              ) : null}
-            </>
-          ) : processing ? (
+        <PreviewFrame
+          label={hasOutput ? `Result · ${outputWidth}×${outputHeight}` : 'Result'}
+          frameStyle={resultFrame}
+        >
+          {showResultImage ? (
+            <img
+              src={afterUrl}
+              alt="After"
+              className="size-full object-contain"
+              width={outW}
+              height={outH}
+            />
+          ) : reprocessingSelected ? (
             <div className="flex flex-col items-center justify-center gap-2 py-6">
               <Spinner size={22} />
               <span className="text-[10px] text-muted">Processing…</span>

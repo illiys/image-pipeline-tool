@@ -4,7 +4,11 @@ import { Spinner } from './components/Spinner'
 import { FileDropzone } from './components/FileDropzone'
 import { ModuleCard } from './components/ModuleCard'
 import { PreviewPanel } from './components/PreviewPanel'
-import { presets } from './config/presets'
+import {
+  getPresetById,
+  getPresetExportZipFileName,
+  presets,
+} from './config/presets'
 import { useDebouncedValue } from './hooks/useDebouncedValue'
 import { usePipelineState } from './hooks/usePipelineState'
 import { downloadAllAsZip, downloadBlob } from './lib/download'
@@ -66,6 +70,17 @@ function App() {
     [processed, selected],
   )
 
+  const sidebarModules = useMemo(() => {
+    const preset = getPresetById(presetId)
+    const ids = new Set(preset?.enabledModuleIds ?? modules.map((m) => m.id))
+    return modules.filter((m) => ids.has(m.id))
+  }, [modules, presetId])
+
+  const exportZipFileName = useMemo(
+    () => getPresetExportZipFileName(presetId),
+    [presetId],
+  )
+
   const addFiles = useCallback((files: File[]) => {
     setError(null)
     void loadFilesAsItems(files).then((items) => {
@@ -105,6 +120,14 @@ function App() {
     },
     [loaded, processed, selectedId],
   )
+
+  useEffect(() => {
+    setProcessed((prev) => {
+      if (prev.length) revokeProcessed(prev)
+      return []
+    })
+    lastPipelineKeyRef.current = null
+  }, [presetId])
 
   useEffect(() => {
     if (!loaded.length) {
@@ -211,7 +234,7 @@ function App() {
         <button
           type="button"
           disabled={processed.length === 0 || processing}
-          onClick={() => void downloadAllAsZip(processed)}
+          onClick={() => void downloadAllAsZip(processed, exportZipFileName)}
           className="rounded-md border border-border bg-surface-elevated px-2.5 py-1 text-xs text-foreground disabled:opacity-40 hover:bg-surface"
         >
           ZIP
@@ -242,11 +265,16 @@ function App() {
                 beforeUrl={selected.objectUrl}
                 afterUrl={selectedProcessed?.previewUrl ?? null}
                 fileName={selected.name}
-                width={selected.width}
-                height={selected.height}
+                inputWidth={selected.width}
+                inputHeight={selected.height}
+                outputWidth={selectedProcessed?.width ?? null}
+                outputHeight={selectedProcessed?.height ?? null}
                 inputBytes={selected.file.size}
                 outputBytes={selectedProcessed?.blob.size ?? null}
                 processing={processing && processingAssetId === selected.id}
+                reprocessingSelected={
+                  processing && processingAssetId === selected.id
+                }
               />
             </div>
           ) : null}
@@ -257,7 +285,7 @@ function App() {
         </div>
 
         <aside className="space-y-2 lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto">
-          {modules.map((mod) => {
+          {sidebarModules.map((mod) => {
             const state = runtime.find((r) => r.moduleId === mod.id)
             if (!state) return null
             return (

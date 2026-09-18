@@ -1,11 +1,13 @@
 import type { ImagePipelineModule } from '../core/types'
 import { motionBlurModule } from './motionBlur'
+import { thumbnailModule } from './thumbnail'
 import { verticalCenterSqueezeModule } from './verticalCenterSqueeze'
 
 /** All registered modules — add new ones here */
 export const allModules: ImagePipelineModule[] = [
   verticalCenterSqueezeModule,
   motionBlurModule,
+  thumbnailModule,
 ]
 
 export function getModulesForRelease(

@@ -73,9 +73,12 @@ function buildRuntimeFromPreset(
   modules: ReturnType<typeof getModulesForRelease>,
 ): ModuleRuntimeState[] {
   const preset = getPresetById(presetId)
+  const enabledSet = new Set(
+    preset?.enabledModuleIds ?? modules.map((m) => m.id),
+  )
   return modules.map((m) => ({
     moduleId: m.id,
-    enabled: true,
+    enabled: enabledSet.has(m.id),
     params: {
       ...m.defaultParams,
       ...(preset?.moduleParams[m.id] ?? {}),
