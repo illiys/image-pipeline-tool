@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AssetList } from './components/AssetList'
 import { Spinner } from './components/Spinner'
 import { FileDropzone } from './components/FileDropzone'
@@ -17,6 +17,10 @@ import {
   revokeProcessedItem,
 } from './lib/processQueue'
 import type { LoadedImageItem, ProcessedItem } from './core/types'
+import { buildPipelineKey } from './lib/pipelineKey'
+
+/** Wait after slider/param changes before re-running the pipeline. */
+const PARAM_DEBOUNCE_MS = 400
 
 function App() {
   const {
@@ -38,7 +42,19 @@ function App() {
   const [processProgress, setProcessProgress] = useState({ done: 0, total: 0 })
   const [error, setError] = useState<string | null>(null)
 
-  const debouncedRuntime = useDebouncedValue(runtime, 120)
+  const debouncedRuntime = useDebouncedValue(runtime, PARAM_DEBOUNCE_MS)
+  const pipelineKey = useMemo(
+    () => buildPipelineKey(debouncedRuntime),
+    [debouncedRuntime],
+  )
+  const loadedIdsKey = useMemo(
+    () => loaded.map((item) => item.id).join('\0'),
+    [loaded],
+  )
+
+  const processedRef = useRef(processed)
+  processedRef.current = processed
+  const lastPipelineKeyRef = useRef<string | null>(null)
 
   const selected = useMemo(
     () => loaded.find((i) => i.id === selectedId) ?? loaded[0] ?? null,
@@ -93,19 +109,30 @@ function App() {
   useEffect(() => {
     if (!loaded.length) {
       setProcessed([])
+      lastPipelineKeyRef.current = null
+      return
+    }
+
+    const processedIdSet = new Set(processedRef.current.map((p) => p.id))
+    const pipelineStale = lastPipelineKeyRef.current !== pipelineKey
+    const toProcess = pipelineStale
+      ? loaded
+      : loaded.filter((item) => !processedIdSet.has(item.id))
+
+    if (toProcess.length === 0) {
       return
     }
 
     let cancelled = false
     setProcessing(true)
     setProcessingAssetId(null)
-    setProcessProgress({ done: 0, total: loaded.length })
+    setProcessProgress({ done: 0, total: toProcess.length })
     setError(null)
 
     void (async () => {
       try {
         let done = 0
-        for (const item of loaded) {
+        for (const item of toProcess) {
           if (cancelled) return
           setProcessingAssetId(item.id)
           const result = await processOne(item, modules, debouncedRuntime)
@@ -114,12 +141,15 @@ function App() {
             return
           }
           done += 1
-          setProcessProgress({ done, total: loaded.length })
+          setProcessProgress({ done, total: toProcess.length })
           setProcessed((prev) => {
             const old = prev.find((p) => p.id === item.id)
             if (old) revokeProcessedItem(old)
             return [...prev.filter((p) => p.id !== item.id), result]
           })
+        }
+        if (!cancelled) {
+          lastPipelineKeyRef.current = pipelineKey
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Processing failed')
@@ -134,7 +164,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [loaded, modules, debouncedRuntime])
+  }, [loadedIdsKey, loaded, pipelineKey, modules, debouncedRuntime])
 
   useEffect(() => {
     return () => {
