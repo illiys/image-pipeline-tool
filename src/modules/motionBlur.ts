@@ -87,11 +87,11 @@ export function motionBlurImageData(
 export const motionBlurModule: ImagePipelineModule = {
   id: 'motion-blur',
   name: 'Motion blur',
-  description: 'Blur along a direction (preset: 90°, 40 px).',
+  description: 'Blur along a direction (preset: 90°, 50 px).',
   order: 20,
   defaultParams: {
     angle: 90,
-    distance: 40,
+    distance: 50,
   },
   paramDefs: [
     {
@@ -115,7 +115,7 @@ export const motionBlurModule: ImagePipelineModule = {
   ],
   process(sourceCanvas, params) {
     const angle = Number(params.angle) ?? 90
-    const distance = Number(params.distance) ?? 40
+    const distance = Number(params.distance) ?? 50
     const imageData = getImageData(sourceCanvas)
     const blurred = motionBlurImageData(imageData, angle, distance)
     const out = createCanvas(sourceCanvas.width, sourceCanvas.height)

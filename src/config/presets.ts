@@ -18,7 +18,7 @@ function buildBlurSymbolPreset(): PipelinePreset {
   return {
     id: 'blur-symbol',
     name: 'Symbol blur',
-    description: '20% vertical squeeze + blur 90° / 40 px',
+    description: '50 px vertical squeeze + blur 90° / 50 px',
     moduleParams,
   }
 }

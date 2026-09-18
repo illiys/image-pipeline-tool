@@ -1,15 +1,17 @@
 import { cloneCanvas, createCanvas } from '../core/canvas'
 import type { ImagePipelineModule } from '../core/types'
 
-/** Share of canvas height removed by center squeeze (0–100). */
-export function shrinkPxFromPercent(canvasHeight: number, squeezePercent: number): number {
-  const p = Math.min(100, Math.max(0, squeezePercent))
-  return (canvasHeight * p) / 100
+/** Total vertical pixels removed (split evenly top and bottom). */
+export function clampSqueezePixels(px: number, canvasHeight: number): number {
+  const n = Number(px)
+  if (!Number.isFinite(n)) return 0
+  const max = Math.max(0, canvasHeight - 1)
+  return Math.min(max, Math.max(0, Math.round(n)))
 }
 
 /**
  * Keeps canvas size (e.g. 320×260).
- * Squeezes content vertically toward the center by a % of height.
+ * Squeezes content vertically toward the center by a fixed pixel amount.
  */
 export const verticalCenterSqueezeModule: ImagePipelineModule = {
   id: 'vertical-center-squeeze',
@@ -18,25 +20,24 @@ export const verticalCenterSqueezeModule: ImagePipelineModule = {
     'Canvas size unchanged; image is compressed on Y and centered (transparent bands top/bottom in PNG).',
   order: 10,
   defaultParams: {
-    squeezePercent: 20,
+    squeezePixels: 50,
   },
   paramDefs: [
     {
-      key: 'squeezePercent',
+      key: 'squeezePixels',
       label: 'Height squeeze',
       kind: 'number',
       min: 0,
-      max: 80,
+      max: 400,
       step: 1,
-      unit: '%',
-      hint: 'Preset: 20% (~50 px at 260 px height)',
+      unit: 'px',
+      hint: 'Total pixels removed (25 px top + 25 px bottom at 50).',
     },
   ],
   process(sourceCanvas, params) {
-    const squeezePercent = Number(params.squeezePercent) || 0
     const w = sourceCanvas.width
     const h = sourceCanvas.height
-    const shrinkPx = shrinkPxFromPercent(h, squeezePercent)
+    const shrinkPx = clampSqueezePixels(Number(params.squeezePixels), h)
     const out = createCanvas(w, h)
     const ctx = out.getContext('2d')
     if (!ctx) throw new Error('2d context unavailable')
@@ -59,9 +60,9 @@ export const verticalCenterSqueezeModule: ImagePipelineModule = {
 /** Layout guide overlay for before preview */
 export function drawLayoutGuide(
   canvas: HTMLCanvasElement,
-  squeezePercent: number,
+  squeezePixels: number,
 ): HTMLCanvasElement {
-  const shrinkPx = shrinkPxFromPercent(canvas.height, squeezePercent)
+  const shrinkPx = clampSqueezePixels(squeezePixels, canvas.height)
   const c = cloneCanvas(canvas)
   const ctx = c.getContext('2d')
   if (!ctx || shrinkPx <= 0) return c
