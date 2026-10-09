@@ -11,6 +11,7 @@ import type { GlobalSettings, OutputImage } from '../core/types'
 import { historyThumbnail } from '../effects/history'
 import { motionBlur } from '../effects/motionBlur'
 import { verticalCenterSqueeze } from '../effects/squeeze'
+import { useConfirm } from '../hooks/useConfirm'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { downloadPng, downloadZip } from '../lib/download'
 import {
@@ -99,6 +100,7 @@ export function RasterTool({
   const outputsRef = useRef(outputs)
   const [selectedName, setSelectedName] = useState<string | null>(null)
   const [exportProgress, setExportProgress] = useState<string | null>(null)
+  const confirm = useConfirm()
 
   const setOutputs = useCallback((next: Record<string, RasterOutput>) => {
     outputsRef.current = next
@@ -222,6 +224,7 @@ export function RasterTool({
 
   return (
     <div className={hidden ? 'hidden' : 'md:flex md:min-h-0 md:flex-1 md:flex-col'}>
+      {confirm.dialog}
       {items.length === 0 ? (
         <FileDropzone
           onFiles={(files) => void addFiles(files)}
@@ -264,9 +267,12 @@ export function RasterTool({
                 accept={RASTER_ACCEPT}
                 uploading={uploading}
                 onClear={() => {
-                  if (window.confirm(`Remove all ${items.length} images?`)) {
-                    removeItems(new Set(items.map((i) => i.name)))
-                  }
+                  confirm.ask({
+                    title: `Remove all ${items.length} images?`,
+                    message: 'Loaded images are not saved anywhere; add them again to continue.',
+                    confirmLabel: 'Remove all',
+                    onConfirm: () => removeItems(new Set(items.map((i) => i.name))),
+                  })
                 }}
               />
               <SettingsPanel settings={settings} onChange={onSettingChange} only={[text.section]} />

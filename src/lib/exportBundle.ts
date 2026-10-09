@@ -42,7 +42,8 @@ function skeletonExt(symbol: SpineSymbol): string {
 
 /**
  * ZIP layout (matches the game repo):
- *   animations/symbol_XX/symbol_XX.{json|skel,atlas} + atlas textures (JSON with the root written in)
+ *   animations/symbol_XX/symbol_XX.{json|skel,atlas} + atlas textures (JSON with the root written in;
+ *     not for variants)
  *   symbols/big/symbol_XX.png
  *   symbols/blur/symbol_XX.png
  *   assets/history/symbols/<history id>.png (one per id) + .gitkeep + README.md
@@ -53,15 +54,18 @@ export function buildExportBundle(
 ): BundleFile[] {
   const files: BundleFile[] = []
   for (const s of symbols) {
-    const slug = symbolSlug(s.key)
-    const dir = `animations/${slug}`
-    files.push(
-      { path: `${dir}/${slug}.${skeletonExt(s)}`, blob: exportedSkeleton(s), optimizePng: false },
-      { path: `${dir}/${slug}.atlas`, blob: s.source.atlasFile, optimizePng: false },
-    )
-    // Texture names must stay as the .atlas references them.
-    for (const [page, file] of s.source.textures) {
-      files.push({ path: `${dir}/${page}`, blob: file, optimizePng: false })
+    // Variants share their original's Spine export, which the original writes.
+    if (s.variantOf == null) {
+      const slug = symbolSlug(s.key)
+      const dir = `animations/${slug}`
+      files.push(
+        { path: `${dir}/${slug}.${skeletonExt(s)}`, blob: exportedSkeleton(s), optimizePng: false },
+        { path: `${dir}/${slug}.atlas`, blob: s.source.atlasFile, optimizePng: false },
+      )
+      // Texture names must stay as the .atlas references them.
+      for (const [page, file] of s.source.textures) {
+        files.push({ path: `${dir}/${page}`, blob: file, optimizePng: false })
+      }
     }
     for (const kind of OUTPUT_KINDS) {
       const img = outputs[s.name]?.images[kind]

@@ -6,6 +6,7 @@ import type { GlobalSettings } from './core/types'
 import { PROJECT_EXT } from './lib/project'
 import { RasterTool } from './tools/RasterTool'
 import { useRasterImages } from './tools/useRasterImages'
+import { cleanTitleTyping } from './lib/projectTitle'
 import { Workspace, type WorkspaceApi, type WorkspaceMeta } from './Workspace'
 
 type Mode = 'spine' | 'blur' | 'history'
@@ -58,7 +59,7 @@ function TabTitleInput({ value, onDone }: { value: string; onDone: (title: strin
     <input
       autoFocus
       value={text}
-      onChange={(e) => setText(e.target.value)}
+      onChange={(e) => setText(cleanTitleTyping(e.target.value))}
       onFocus={(e) => e.currentTarget.select()}
       onBlur={() => finish(text)}
       onKeyDown={(e) => {
@@ -109,13 +110,43 @@ function App() {
     }
   }, [mode])
 
-  // Closing/reloading the page with unsaved changes in any project asks first.
-  const anyDirty = Object.values(metas).some((m) => m.dirty)
+  // Closing/reloading the page asks first while something would be lost: unsaved
+  // changes in a project, or static images (they are never saved).
+  const anyDirty =
+    Object.values(metas).some((m) => m.dirty) || rasterImages.items.length > 0
+  /** Set once the user confirmed a reload in our dialog, so the browser does not ask again */
+  const unloadConfirmed = useRef(false)
   useEffect(() => {
     if (!anyDirty) return
-    const onBeforeUnload = (e: BeforeUnloadEvent) => e.preventDefault()
+    // The browser's own prompt: the only option for its reload button and for closing the tab.
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (unloadConfirmed.current) return
+      e.preventDefault()
+      // Safari and older Chrome show the prompt only when returnValue is set.
+      e.returnValue = ''
+    }
+    // Reload shortcuts can be intercepted, so they get the in-page dialog instead.
+    const onKeyDown = (e: KeyboardEvent) => {
+      const reload = e.key === 'F5' || (e.code === 'KeyR' && (e.metaKey || e.ctrlKey) && !e.altKey)
+      if (!reload) return
+      e.preventDefault()
+      if (e.repeat) return
+      setConfirm({
+        title: 'Reload the page?',
+        message: 'Unsaved project changes and loaded static images will be lost.',
+        confirmLabel: 'Discard and reload',
+        onConfirm: () => {
+          unloadConfirmed.current = true
+          window.location.reload()
+        },
+      })
+    }
     window.addEventListener('beforeunload', onBeforeUnload)
-    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload)
+      window.removeEventListener('keydown', onKeyDown)
+    }
   }, [anyDirty])
 
   const onMeta = useCallback((id: TabId, meta: WorkspaceMeta) => {
@@ -170,6 +201,7 @@ function App() {
 
   const closeTab = (id: TabId) => {
     const doClose = () => {
+      apis.current.get(id)?.dispose()
       // Computed outside state updaters: they must stay pure (StrictMode runs them twice).
       const idx = tabs.indexOf(id)
       const rest = tabs.filter((t) => t !== id)
@@ -199,13 +231,18 @@ function App() {
 
   return (
     <div className="mx-auto max-w-[2400px] px-3 py-4 sm:px-4 md:flex md:h-svh md:flex-col">
+      {/*
+        Below lg: row 1 = title + modes, row 2 = project controls + export (fixed height,
+        so the export button appearing/disappearing moves nothing). lg+: one row.
+      */}
       <header className="mb-2 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2">
-        <h1 className="text-base font-semibold">Spine Symbol Export</h1>
-        <span className="font-mono text-[10px] text-muted">v{APP_VERSION}</span>
+        <h1 className="order-1 text-base font-semibold">Spine Symbol Export</h1>
+        <span className="order-1 font-mono text-[10px] text-muted">v{APP_VERSION}</span>
+        <div className="order-3 basis-full lg:hidden" aria-hidden />
         <button
           type="button"
           onClick={() => openInput.current?.click()}
-          className={`rounded-md border border-border px-2 py-1 text-[11px] text-muted hover:border-accent hover:text-accent ${
+          className={`order-4 rounded-md border border-border px-2 py-1 text-[11px] text-muted hover:border-accent hover:text-accent lg:order-2 ${
             spineMode ? '' : 'hidden'
           }`}
           title={`Open ${PROJECT_EXT} projects — each in its own tab (or drop them on the Spine drop zone)`}
@@ -227,18 +264,21 @@ function App() {
         {/* The active project puts its title / Save / status here */}
         <div
           ref={setProjectSlot}
-          className={`flex min-w-0 items-center gap-1.5 text-[11px] ${spineMode ? '' : 'hidden'}`}
+          className={`order-4 flex min-w-0 items-center gap-1.5 text-[11px] lg:order-2 ${spineMode ? '' : 'hidden'}`}
         />
         {/* The active tool puts its export button here */}
-        <div ref={setActionsSlot} className="ml-auto flex items-center" />
-        <nav className="flex rounded-lg border border-border bg-surface-elevated p-0.5" aria-label="Mode">
+        <div ref={setActionsSlot} className="order-5 ml-auto flex min-h-7 items-center lg:order-3" />
+        <nav
+          className="order-2 flex w-full rounded-lg border border-border bg-surface-elevated p-0.5 sm:ml-auto sm:w-auto lg:order-4 lg:ml-0"
+          aria-label="Mode"
+        >
           {MODES.map((m) => (
             <button
               key={m.id}
               type="button"
               title={m.title}
               onClick={() => setMode(m.id)}
-              className={`rounded-md px-2.5 py-1 text-xs ${
+              className={`flex-1 whitespace-nowrap rounded-md px-2.5 py-1 text-xs sm:flex-none ${
                 mode === m.id ? 'bg-accent text-white' : 'text-muted hover:text-foreground'
               }`}
             >

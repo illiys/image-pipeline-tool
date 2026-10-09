@@ -46,7 +46,9 @@ export function ExportButton({ countLabel, pending, total, progress, blocker, on
                 strokeLinejoin="round"
               />
             </svg>
-            Download ZIP · {countLabel}
+            Download ZIP
+            {/* Narrow screens: keep it on the row with the project controls */}
+            <span className="hidden sm:inline">· {countLabel}</span>
           </>
         )}
       </button>

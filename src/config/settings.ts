@@ -20,8 +20,8 @@ export type SettingsSection = {
 
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   {
-    title: 'Static default',
-    description: 'Canvas size of the static frame for symbols without their own size.',
+    title: 'Static',
+    description: 'Canvas size of the static frame.',
     params: [
       { key: 'staticWidth', label: 'Width', min: 1, max: 2048, step: 1, unit: 'px' },
       { key: 'staticHeight', label: 'Height', min: 1, max: 2048, step: 1, unit: 'px' },
@@ -90,6 +90,25 @@ export function normalizeSettings(raw: Partial<Record<string, unknown>>): Global
     out[def.key] = Math.min(def.max, Math.max(def.min, n))
   }
   return out
+}
+
+/** A symbol's own values, kept only for whole sections and clamped like the settings. */
+export function normalizeOwn(raw: Partial<Record<string, unknown>> | null | undefined): Partial<GlobalSettings> {
+  const out: Partial<GlobalSettings> = {}
+  if (!raw) return out
+  for (const section of SETTINGS_SECTIONS) {
+    const values = section.params.map((def) => Number(raw[def.key]))
+    if (!section.params.every((def, i) => raw[def.key] != null && Number.isFinite(values[i]))) continue
+    section.params.forEach((def, i) => {
+      out[def.key] = Math.min(def.max, Math.max(def.min, values[i]))
+    })
+  }
+  return out
+}
+
+/** Whether `own` overrides this section. */
+export function isOwnSection(own: Partial<GlobalSettings>, section: SettingsSection): boolean {
+  return section.params.every((p) => own[p.key] != null)
 }
 
 const STORAGE_KEY = 'spine-symbol-export.settings'

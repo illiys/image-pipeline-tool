@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { loadSettings, saveSettings } from './config/settings'
 import type { GlobalSettings, SpineSymbol } from './core/types'
 import { downloadBlob } from './lib/download'
+import { cleanTitle } from './lib/projectTitle'
 import {
   openProject,
   PROJECT_EXT,
@@ -22,11 +23,12 @@ export type WorkspaceApi = {
   open: (file: File) => Promise<void>
   /** Rename the project (renamed in its tab); the next Save uses it as the file name */
   rename: (title: string) => void
+  /** Free the project's resources before its tab is closed */
+  dispose: () => void
 }
 
-/** Strip characters that are not allowed in file names. */
 function safeFileName(name: string): string {
-  return name.replace(/[\\/:*?"<>|]+/g, '_').trim() || UNTITLED
+  return cleanTitle(name) || UNTITLED
 }
 
 type Props = {
@@ -97,7 +99,7 @@ export function Workspace({
       setSettings(project.settings)
       if (!spineApi.current) throw new Error('Spine tool is not ready')
       spineApi.current.load(project.symbols)
-      setProjectTitle(file.name.replace(/\.ssproj$/i, '') || UNTITLED)
+      setProjectTitle(safeFileName(file.name.replace(/\.ssproj$/i, '')))
       // Same content as the file ⇒ clean (files are matched by name/size/mtime).
       setSavedFingerprint(projectFingerprint(project))
     } catch (e) {
@@ -106,6 +108,23 @@ export function Workspace({
       setOpening(null)
     }
   }
+
+  // ⌘/Ctrl+S saves the shown project instead of the browser's "Save page".
+  const saveRef = useRef(saveCurrentProject)
+  useEffect(() => {
+    saveRef.current = canSave ? saveCurrentProject : () => {}
+  })
+  useEffect(() => {
+    if (!active) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      // By key position, so it works on any layout (ы on Russian).
+      if (e.code !== 'KeyS' || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return
+      e.preventDefault()
+      if (!e.repeat) saveRef.current()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [active])
 
   // Latest open function behind a stable API object.
   const openRef = useRef(openProjectFile)
@@ -116,7 +135,8 @@ export function Workspace({
     apiRef,
     () => ({
       open: (file) => openRef.current(file),
-      rename: (t) => setProjectTitle(t.trim() || UNTITLED),
+      rename: (t) => setProjectTitle(safeFileName(t)),
+      dispose: () => spineApi.current?.dispose(),
     }),
     [],
   )
@@ -133,7 +153,7 @@ export function Workspace({
           className={`rounded-md border px-2 py-1 ${
             dirty ? 'border-accent text-accent' : 'border-border text-muted'
           } hover:border-accent hover:text-accent`}
-          title={`Save symbols, settings and Spine files as ${safeFileName(title)}${PROJECT_EXT}`}
+          title={`Save symbols, settings and Spine files as ${safeFileName(title)}${PROJECT_EXT} (⌘/Ctrl+S)`}
         >
           Save
         </button>
@@ -159,6 +179,7 @@ export function Workspace({
         apiRef={spineApi}
         onSymbolsChange={setSpineSymbols}
         onOpenProjects={onOpenProjects}
+        exportName={safeFileName(title)}
       />
     </div>
   )

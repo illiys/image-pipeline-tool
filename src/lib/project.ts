@@ -1,5 +1,5 @@
-import type { FrameSize, GlobalSettings, RootOffset, SpineSymbol } from '../core/types'
-import { normalizeSettings } from '../config/settings'
+import type { FrameSize, GlobalSettings, RootOffset, SpineSource, SpineSymbol } from '../core/types'
+import { normalizeOwn, normalizeSettings } from '../config/settings'
 import { sourceFromFiles } from '../spine/upload'
 
 /**
@@ -25,7 +25,12 @@ type SpineEntry = {
   name: string
   key: string
   historyIds: string[] | null
-  size: FrameSize | null
+  /** The symbol's own settings sections; missing in older projects */
+  own?: Partial<GlobalSettings>
+  /** Older projects: own static size (now `own.staticWidth/Height`) */
+  size?: FrameSize | null
+  /** Variant's original (its Spine files are referenced, not duplicated); missing = null */
+  variantOf?: string | null
   animationName: string
   frame: number
   root: RootOffset
@@ -76,7 +81,8 @@ export function saveProject(data: ProjectData): Blob {
     name: s.name,
     key: s.key,
     historyIds: s.historyIds,
-    size: s.size,
+    own: s.own,
+    variantOf: s.variantOf,
     animationName: s.animationName,
     frame: s.frame,
     root: s.root,
@@ -113,9 +119,11 @@ export function saveProject(data: ProjectData): Blob {
 }
 
 export async function openProject(file: File): Promise<ProjectData> {
+  const notProject = new Error(`${file.name} is not a ${PROJECT_EXT} project`)
+  if (file.size < 12) throw notProject
   const head = new DataView(await file.slice(0, 12).arrayBuffer())
   const magic = String.fromCharCode(...Array.from({ length: 6 }, (_, i) => head.getUint8(i)))
-  if (head.byteLength < 12 || magic !== MAGIC) throw new Error(`${file.name} is not a ${PROJECT_EXT} project`)
+  if (magic !== MAGIC) throw notProject
   const version = head.getUint16(6, true)
   if (version > FORMAT_VERSION) {
     throw new Error(`${file.name} was saved by a newer version (format ${version})`)
@@ -140,10 +148,11 @@ export async function openProject(file: File): Promise<ProjectData> {
     return f
   }
 
-  const symbols: SpineSymbol[] = []
-  for (const e of manifest.spine) {
+  // Originals first, so variants share their source (one parse, one set of GPU textures).
+  const sources = new Map<string, SpineSource>()
+  const loadSource = async (e: SpineEntry): Promise<SpineSource> => {
     const skeletonFile = get(e.skeleton)
-    const source = await sourceFromFiles(
+    return sourceFromFiles(
       skeletonFile,
       e.json ? await skeletonFile.text() : null,
       get(e.atlas),
@@ -153,12 +162,25 @@ export async function openProject(file: File): Promise<ProjectData> {
         return get(id)
       },
     )
+  }
+  for (const e of manifest.spine) {
+    if (e.variantOf == null) sources.set(e.name, await loadSource(e))
+  }
+
+  const symbols: SpineSymbol[] = []
+  for (const e of manifest.spine) {
+    const original = e.variantOf != null ? sources.get(e.variantOf) : undefined
+    const source = sources.get(e.name) ?? original ?? (await loadSource(e))
     const animNames = new Set(source.animations.map((a) => a.name))
     symbols.push({
       name: e.name,
       key: e.key,
       historyIds: e.historyIds,
-      size: e.size,
+      own: normalizeOwn(
+        e.own ?? (e.size ? { staticWidth: e.size.width, staticHeight: e.size.height } : null),
+      ),
+      // A variant whose original is missing becomes a regular symbol
+      variantOf: original ? e.variantOf! : null,
       source,
       animationName: animNames.has(e.animationName) ? e.animationName : (source.animations[0]?.name ?? ''),
       frame: e.frame,
@@ -185,7 +207,9 @@ export function projectFingerprint(data: ProjectData): string {
       s.name,
       s.key,
       s.historyIds,
-      s.size,
+      // Canonical key order, so toggling a section off and on again is not a change
+      normalizeOwn(s.own),
+      s.variantOf,
       s.animationName,
       s.frame,
       s.root,

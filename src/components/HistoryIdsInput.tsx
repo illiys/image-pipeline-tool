@@ -8,10 +8,13 @@ import { useState } from 'react'
 export function HistoryIdsInput({
   ids,
   manual,
+  generatedHint = 'Generated from the id (09_14 → 9, 14); edit to override',
   onChange,
 }: {
   ids: string[]
   manual: boolean
+  /** Title while the ids are not edited by hand */
+  generatedHint?: string
   onChange: (ids: string[] | null) => void
 }) {
   const [text, setText] = useState(ids.join(', '))
@@ -27,7 +30,7 @@ export function HistoryIdsInput({
       title={
         manual
           ? 'Edited by hand; clear the field to generate from the id again'
-          : 'Generated from the id (09_14 → 9, 14); edit to override'
+          : generatedHint
       }
       className={`h-6 w-full min-w-0 rounded border px-1.5 font-mono text-[11px] text-foreground ${
         manual ? 'border-accent/60' : 'border-border'

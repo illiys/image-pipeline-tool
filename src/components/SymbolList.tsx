@@ -9,6 +9,8 @@ export type ListItem = {
   title: string
   /** Second line (e.g. the source file name), hidden when equal to title */
   subtitle?: string
+  /** Shown nested under the item above (e.g. a symbol variant) */
+  indent?: boolean
 }
 
 type Props = {
@@ -91,10 +93,11 @@ export function SymbolList({
                         type="button"
                         onClick={() => onSelect(item.name)}
                         title={item.subtitle ?? item.title}
-                        className={`flex min-w-0 flex-1 items-center gap-1.5 px-1.5 py-0.5 text-left font-mono text-[10px] leading-4 ${
+                        className={`flex min-w-0 flex-1 items-center gap-1.5 py-0.5 pr-1.5 ${item.indent ? 'pl-4' : 'pl-1.5'} text-left font-mono text-[10px] leading-4 ${
                           active ? 'text-accent' : 'text-muted hover:text-foreground'
                         }`}
                       >
+                        {item.indent ? <span className="-ml-2 opacity-50">↳</span> : null}
                         {pendingNames.has(item.name) ? <Spinner size={10} /> : null}
                         {errorNames.has(item.name) ? (
                           <span className="text-red-500" title="Render failed">

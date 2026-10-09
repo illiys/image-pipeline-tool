@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import { useState, type CSSProperties } from 'react'
 import { useOptimizedSize } from '../hooks/useOptimizedSize'
 import { formatSizeKb } from '../lib/formatSize'
 import { pixelStyle } from './frameStyles'
@@ -12,6 +12,7 @@ export function Tile({
   pending,
   onDownload,
   sizeOf = 'export',
+  guides,
 }: {
   label: string
   image: OutputImage | undefined
@@ -20,6 +21,8 @@ export function Tile({
   onDownload: (() => void) | null
   /** 'export' = size after oxipng (computed in the background); 'file' = blob as is */
   sizeOf?: 'export' | 'file'
+  /** Center guides over the image, with a toggle in the caption; omitted = none */
+  guides?: { shown: boolean; onToggle: () => void }
 }) {
   const optimized = useOptimizedSize(image?.blob, sizeOf === 'export' && !pending)
   const size =
@@ -67,6 +70,22 @@ export function Tile({
             </svg>
           </button>
         ) : null}
+        {guides ? (
+          <button
+            type="button"
+            onClick={guides.onToggle}
+            aria-pressed={guides.shown}
+            title={guides.shown ? 'Hide center guides' : 'Show center guides'}
+            aria-label="Center guides"
+            className={`flex size-4 items-center justify-center rounded hover:bg-accent/10 hover:text-accent ${
+              guides.shown ? 'text-accent' : ''
+            }`}
+          >
+            <svg viewBox="0 0 16 16" className="size-3" fill="none" aria-hidden>
+              <path d="M8 1v14M1 8h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </button>
+        ) : null}
       </figcaption>
       <div
         className="checkerboard relative max-w-full overflow-hidden border border-border"
@@ -80,6 +99,12 @@ export function Tile({
             className={`block size-full select-none transition-opacity ${pending ? 'opacity-50' : ''}`}
           />
         ) : null}
+        {guides?.shown ? (
+          <div className="pointer-events-none absolute inset-0" aria-hidden>
+            <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-fuchsia-600/70" />
+            <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-fuchsia-600/70" />
+          </div>
+        ) : null}
         {pending ? (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <Spinner size={18} />
@@ -88,6 +113,29 @@ export function Tile({
       </div>
     </figure>
   )
+}
+
+const GUIDES_KEY = 'spine-symbol-export.staticGuides'
+
+/** Static center guides on/off, remembered per browser. */
+function useStaticGuides() {
+  const [shown, setShown] = useState(() => {
+    try {
+      return localStorage.getItem(GUIDES_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
+  const onToggle = () => {
+    const next = !shown
+    setShown(next)
+    try {
+      localStorage.setItem(GUIDES_KEY, next ? '1' : '0')
+    } catch {
+      /* storage unavailable */
+    }
+  }
+  return { shown, onToggle }
 }
 
 type Props = {
@@ -107,6 +155,7 @@ export function OutputGrid({
   onDownload,
 }: Props) {
   const images = outputs?.images ?? {}
+  const staticGuides = useStaticGuides()
   const history = images.history
 
   const dl = (kind: OutputKind) =>
@@ -127,6 +176,7 @@ export function OutputGrid({
           frame={pixelStyle(staticWidth, staticHeight)}
           pending={pendingKinds.has('static')}
           onDownload={dl('static')}
+          guides={staticGuides}
         />
         <Tile
           label="Blur"

@@ -32,6 +32,8 @@ type Prepared = {
 let gpu: Gpu | null = null
 /** Atlas (with GPU textures) + skeleton data per source, valid for the current `gpu` only. */
 let prepared = new Map<SpineSource, Promise<Prepared>>()
+/** Sources whose symbols are gone; a late render must not cache their textures again. */
+const released = new WeakSet<SpineSource>()
 /** Renders are serialized: they share one canvas. */
 let queue: Promise<unknown> = Promise.resolve()
 
@@ -88,6 +90,7 @@ async function prepare(g: Gpu, source: SpineSource): Promise<Prepared> {
 }
 
 function getPrepared(g: Gpu, source: SpineSource): Promise<Prepared> {
+  if (released.has(source)) throw new Error('Spine source was released')
   let p = prepared.get(source)
   if (!p) {
     p = prepare(g, source)
@@ -99,6 +102,7 @@ function getPrepared(g: Gpu, source: SpineSource): Promise<Prepared> {
 
 /** Free GPU textures of a source that is no longer used. */
 export function releaseSpineSource(source: SpineSource) {
+  released.add(source)
   const p = prepared.get(source)
   if (!p) return
   prepared.delete(source)

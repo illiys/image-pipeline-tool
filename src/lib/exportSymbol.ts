@@ -47,8 +47,9 @@ export function historyIdsFromKey(key: string): string[] {
     .map((p) => String(Number(p)))
 }
 
+/** Variants have no history by default (the original already writes those ids). */
 export function historyIdsFor(symbol: SpineSymbol): string[] {
-  return symbol.historyIds ?? historyIdsFromKey(symbol.key)
+  return symbol.historyIds ?? (symbol.variantOf != null ? [] : historyIdsFromKey(symbol.key))
 }
 
 /** Paths of an output inside the export ZIP (history: one copy per history id). */
@@ -59,8 +60,20 @@ export function outputPaths(symbol: SpineSymbol, kind: OutputKind): string[] {
   return historyIdsFor(symbol).map((id) => `assets/history/symbols/${id}.png`)
 }
 
+/** Project settings with the symbol's own sections applied. */
+export function settingsFor(symbol: SpineSymbol, s: GlobalSettings): GlobalSettings {
+  return { ...s, ...symbol.own }
+}
+
 export function sizeFor(symbol: SpineSymbol, s: GlobalSettings): FrameSize {
-  return symbol.size ?? { width: s.staticWidth, height: s.staticHeight }
+  const e = settingsFor(symbol, s)
+  return { width: e.staticWidth, height: e.staticHeight }
+}
+
+/** Game cell guide (0 = hidden). */
+export function cellFor(symbol: SpineSymbol, s: GlobalSettings): FrameSize {
+  const e = settingsFor(symbol, s)
+  return { width: e.cellWidth, height: e.cellHeight }
 }
 
 /** Root used for an animation: its own root, or the symbol's shared root. */
@@ -82,10 +95,11 @@ function sourceId(source: SpineSource): string {
 /** What each output depends on. Equal keys ⇒ the existing image is still valid. */
 export function outputKeys(
   symbol: SpineSymbol,
-  s: GlobalSettings,
+  projectSettings: GlobalSettings,
 ): Record<OutputKind, string> {
+  const s = settingsFor(symbol, projectSettings)
   const root = rootFor(symbol)
-  const size = sizeFor(symbol, s)
+  const size = { width: s.staticWidth, height: s.staticHeight }
   const staticKey = JSON.stringify([
     sourceId(symbol.source),
     symbol.animationName,
@@ -135,11 +149,12 @@ export class Cancelled extends Error {}
  */
 export async function renderSymbolOutputs(
   symbol: SpineSymbol,
-  settings: GlobalSettings,
+  projectSettings: GlobalSettings,
   prev: SymbolOutputs | undefined,
   isCancelled: () => boolean,
 ): Promise<SymbolOutputs> {
-  const keys = outputKeys(symbol, settings)
+  const keys = outputKeys(symbol, projectSettings)
+  const settings = settingsFor(symbol, projectSettings)
   const images: Partial<Record<OutputKind, OutputImage>> = {}
   const created: OutputImage[] = []
   const check = () => {
@@ -156,7 +171,8 @@ export async function renderSymbolOutputs(
         return staticCanvas
       }
       staticCanvas = await renderSpineFrame(symbol.source, {
-        ...sizeFor(symbol, settings),
+        width: settings.staticWidth,
+        height: settings.staticHeight,
         animationName: symbol.animationName,
         frame: symbol.frame,
         fps: symbol.source.fps,

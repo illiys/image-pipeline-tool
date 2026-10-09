@@ -1,4 +1,4 @@
-import type { FrameSize, ParamDef, RootOffset, SpineSymbol } from '../core/types'
+import type { ParamDef, RootOffset, SpineSymbol } from '../core/types'
 import { historyIdsFor, rootFor, symbolSlug } from '../lib/exportSymbol'
 import { maxFrameIndex } from '../spine/skeletonData'
 import { HistoryIdsInput } from './HistoryIdsInput'
@@ -23,8 +23,6 @@ const ROOT_Y: ParamDef = {
   hint: 'Export root (canvas 0,0) relative to the skeleton root bone, px down',
 }
 
-const SIZE_W: ParamDef = { key: 'width', label: 'Width', min: 1, max: 2048, step: 1, unit: 'px' }
-const SIZE_H: ParamDef = { key: 'height', label: 'Height', min: 1, max: 2048, step: 1, unit: 'px' }
 
 type Props = {
   symbol: SpineSymbol
@@ -32,9 +30,9 @@ type Props = {
   onKeyChange: (key: string) => void
   /** null = derive from the key */
   onHistoryIdsChange: (ids: string[] | null) => void
-  defaultSize: FrameSize
-  /** null = use the default size */
-  onSizeChange: (size: FrameSize | null) => void
+  /** Slug of the original when this symbol is a variant */
+  variantOfSlug: string | null
+  onAddVariant: () => void
   onAnimationChange: (animationName: string) => void
   onFrameChange: (frame: number) => void
   onRootChange: (root: RootOffset) => void
@@ -52,8 +50,8 @@ export function SymbolInspector({
   idProblem,
   onKeyChange,
   onHistoryIdsChange,
-  defaultSize,
-  onSizeChange,
+  variantOfSlug,
+  onAddVariant,
   onAnimationChange,
   onFrameChange,
   onRootChange,
@@ -98,10 +96,34 @@ export function SymbolInspector({
           key={`${symbol.name}\t${symbol.historyIds ? 'manual' : symbol.key}`}
           ids={historyIdsFor(symbol)}
           manual={symbol.historyIds != null}
+          generatedHint={
+            variantOfSlug != null
+              ? 'Variants have no history by default; type ids to add some'
+              : undefined
+          }
           onChange={onHistoryIdsChange}
         />
       </div>
       {idProblem ? <p className="text-[10px] text-red-500">{idProblem}</p> : null}
+      <div className="flex items-center gap-1 text-[10px]">
+        {variantOfSlug != null ? (
+          <span
+            className="min-w-0 truncate"
+            title="Same Spine as the original: exports only static, blur and history"
+          >
+            Variant of <span className="font-mono text-foreground/80">{variantOfSlug}</span>
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={onAddVariant}
+            title="Copy of this symbol on the same Spine (own id, root, size, frame). Exports only static, blur and history."
+            className={`ml-auto ${smallBtn}`}
+          >
+            + Variant
+          </button>
+        )}
+      </div>
 
       <div className="border-t border-border" />
 
@@ -195,39 +217,8 @@ export function SymbolInspector({
           <span className="truncate">own for {symbol.animationName}</span>
         </label>
       ) : null}
-      <div className={row}>
-        <label className="flex items-center gap-1" title="Own static size for this symbol">
-          <input
-            type="checkbox"
-            checked={symbol.size != null}
-            onChange={(e) => onSizeChange(e.target.checked ? { ...defaultSize } : null)}
-            className="accent-accent-dim"
-          />
-          <span className={label}>Size</span>
-        </label>
-        {symbol.size ? (
-          <div className="flex min-w-0 items-center gap-2">
-            <InlineField
-              prefix="w"
-              def={SIZE_W}
-              value={symbol.size.width}
-              onChange={(width) => onSizeChange({ ...symbol.size!, width })}
-            />
-            <InlineField
-              prefix="h"
-              def={SIZE_H}
-              value={symbol.size.height}
-              onChange={(height) => onSizeChange({ ...symbol.size!, height })}
-            />
-          </div>
-        ) : (
-          <span className="font-mono text-[10px]">
-            default {defaultSize.width}×{defaultSize.height}
-          </span>
-        )}
-      </div>
       <div className="flex items-center gap-1 border-t border-border pt-2 text-[10px]">
-        <span className="mr-auto" title="Root, per-animation roots and own size">
+        <span className="mr-auto" title="Root, per-animation roots and own settings">
           Settings
         </span>
         <button type="button" onClick={onCopy} className={smallBtn}>

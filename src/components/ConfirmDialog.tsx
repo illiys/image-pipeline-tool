@@ -1,9 +1,12 @@
 import { useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 
 export type ConfirmRequest = {
   title: string
   message: string
   confirmLabel: string
+  /** 'danger' (default): red confirm button, for discarding or removing things */
+  tone?: 'danger' | 'default'
   onConfirm: () => void
 }
 
@@ -30,7 +33,8 @@ export function ConfirmDialog({
   }, [request, onClose])
 
   if (!request) return null
-  return (
+  // Portaled: an ancestor with a transform or overflow would clip a fixed overlay.
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
       onPointerDown={(e) => {
@@ -51,12 +55,15 @@ export function ConfirmDialog({
               onClose()
               request.onConfirm()
             }}
-            className="rounded-md bg-red-600 px-3 py-1.5 font-medium text-white hover:bg-red-700"
+            className={`rounded-md px-3 py-1.5 font-medium text-white ${
+              request.tone === 'default' ? 'bg-accent hover:bg-accent-dim' : 'bg-red-600 hover:bg-red-700'
+            }`}
           >
             {request.confirmLabel}
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

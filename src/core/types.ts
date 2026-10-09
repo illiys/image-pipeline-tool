@@ -40,8 +40,16 @@ export type SpineSymbol = {
   key: string
   /** History file names without .png ('9', '14'); null = derived from the key */
   historyIds: string[] | null
-  /** Static canvas size; null = default size from settings */
-  size: FrameSize | null
+  /**
+   * The symbol's own values for whole settings sections (static size, cell, blur, history);
+   * missing keys come from the project settings.
+   */
+  own: Partial<GlobalSettings>
+  /**
+   * Name of the symbol this one is a variant of (same Spine source, own settings), or null.
+   * Variants export only static/blur/history, no animations; their history ids default to none.
+   */
+  variantOf: string | null
   source: SpineSource
   /** '' = setup pose (skeleton without animations) */
   animationName: string

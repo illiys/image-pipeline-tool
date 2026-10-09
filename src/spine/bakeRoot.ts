@@ -43,8 +43,17 @@ export function bakeRootIntoJson(
   return JSON.stringify(data)
 }
 
+/**
+ * Before its first key a timeline leaves the bone at the setup pose, which now lacks the
+ * offset. A stepped key at 0 holds the offset (and nothing else) until the first key.
+ */
+function holdOffsetUntilFirstKey(keys: { time?: number; curve?: CurveField }[]) {
+  if (keys.length > 0 && (keys[0].time ?? 0) > 0) keys.unshift({ curve: 'stepped' })
+}
+
 function offsetRootTranslate(t: BoneTimelines, ax: number, ay: number) {
   if (t.translate) {
+    holdOffsetUntilFirstKey(t.translate)
     for (const key of t.translate) {
       key.x = round((key.x ?? 0) + ax)
       key.y = round((key.y ?? 0) + ay)
@@ -62,6 +71,7 @@ function offsetRootTranslate(t: BoneTimelines, ax: number, ay: number) {
 }
 
 function offsetSingle(keys: ValueKey[], d: number) {
+  holdOffsetUntilFirstKey(keys)
   for (const key of keys) {
     key.value = round((key.value ?? 0) + d)
     if (Array.isArray(key.curve)) key.curve = key.curve.map((v, i) => (i % 2 === 1 ? round(v + d) : v))
