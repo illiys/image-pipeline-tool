@@ -1,4 +1,4 @@
-/** Human-readable size in kilobytes (matches typical Finder-style rounding). */
+/** Human-readable size in kilobytes (Finder-style rounding). */
 export function formatSizeKb(bytes: number): string {
   const kb = bytes / 1024
   if (kb < 1) return '<1 KB'
