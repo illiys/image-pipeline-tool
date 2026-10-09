@@ -87,7 +87,10 @@ export function ScrollArea({ children, className = '' }: Props) {
     <div className={`flex min-h-0 flex-1 gap-1.5 ${className}`}>
       <div
         ref={viewportRef}
-        className="scrollbar-none min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain"
+        // Contain overscroll only when the list really scrolls; otherwise the wheel must reach the page.
+        className={`scrollbar-none min-h-0 min-w-0 flex-1 overflow-y-auto ${
+          thumb.show ? 'overscroll-contain' : ''
+        }`}
       >
         {children}
       </div>

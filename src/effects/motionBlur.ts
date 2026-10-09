@@ -1,5 +1,4 @@
 import { createCanvas, getImageData, putImageData } from '../core/canvas'
-import type { ImagePipelineModule } from '../core/types'
 
 function degToRad(deg: number): number {
   return (deg * Math.PI) / 180
@@ -84,41 +83,11 @@ export function motionBlurImageData(
   return new ImageData(out, w, h)
 }
 
-export const motionBlurModule: ImagePipelineModule = {
-  id: 'motion-blur',
-  name: 'Motion blur',
-  description: 'Blur along a direction (preset: 90°, 50 px).',
-  order: 20,
-  defaultParams: {
-    angle: 90,
-    distance: 50,
-  },
-  paramDefs: [
-    {
-      key: 'angle',
-      label: 'Angle',
-      kind: 'number',
-      min: 0,
-      max: 360,
-      step: 1,
-      unit: '°',
-    },
-    {
-      key: 'distance',
-      label: 'Distance',
-      kind: 'number',
-      min: 0,
-      max: 200,
-      step: 1,
-      unit: 'px',
-    },
-  ],
-  process(sourceCanvas, params) {
-    const angle = Number(params.angle) ?? 90
-    const distance = Number(params.distance) ?? 50
-    const imageData = getImageData(sourceCanvas)
-    const blurred = motionBlurImageData(imageData, angle, distance)
-    const out = createCanvas(sourceCanvas.width, sourceCanvas.height)
-    return putImageData(out, blurred)
-  },
+export function motionBlur(
+  source: HTMLCanvasElement,
+  angleDeg: number,
+  distance: number,
+): HTMLCanvasElement {
+  const blurred = motionBlurImageData(getImageData(source), angleDeg, distance)
+  return putImageData(createCanvas(source.width, source.height), blurred)
 }

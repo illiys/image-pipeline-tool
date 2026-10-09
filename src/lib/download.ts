@@ -1,5 +1,6 @@
 import JSZip from 'jszip'
-import type { ProcessedItem } from '../core/types'
+import type { BundleFile } from './exportBundle'
+import { getOptimizedPng } from './optimizePng'
 
 export function downloadBlob(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob)
@@ -7,14 +8,24 @@ export function downloadBlob(blob: Blob, fileName: string) {
   a.href = url
   a.download = fileName
   a.click()
-  URL.revokeObjectURL(url)
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-export async function downloadAllAsZip(items: ProcessedItem[], zipName: string) {
+/** Lossless oxipng pass happens here, at export time, not on every re-render. */
+export async function downloadPng(blob: Blob, fileName: string) {
+  downloadBlob(await getOptimizedPng(blob), fileName)
+}
+
+export async function downloadZip(
+  files: BundleFile[],
+  zipName: string,
+  onProgress?: (done: number, total: number) => void,
+) {
   const zip = new JSZip()
-  for (const item of items) {
-    zip.file(item.name, item.blob)
+  let done = 0
+  for (const f of files) {
+    zip.file(f.path, f.optimizePng ? await getOptimizedPng(f.blob) : f.blob)
+    onProgress?.(++done, files.length)
   }
-  const blob = await zip.generateAsync({ type: 'blob' })
-  downloadBlob(blob, zipName)
+  downloadBlob(await zip.generateAsync({ type: 'blob' }), zipName)
 }
