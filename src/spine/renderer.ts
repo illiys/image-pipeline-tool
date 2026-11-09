@@ -479,6 +479,88 @@ export function renderSpineFrame(source: SpineSource, req: FrameRequest): Promis
   })
 }
 
+/** Box in root-bone-relative pixels (x right, y down), like `PreviewResult.bounds`. */
+export type Box = { x: number; y: number; width: number; height: number }
+
+/**
+ * Bounds of the visible attachments (slot and attachment alpha > 0, active bones) of
+ * the posed skeleton, or null when nothing is visible.
+ */
+function visibleBounds(skeleton: Skeleton, bone: { x: number; y: number }): Box | null {
+  let x0 = Infinity
+  let y0 = Infinity
+  let x1 = -Infinity
+  let y1 = -Infinity
+  let verts = new Float32Array(64)
+  for (const slot of skeleton.drawOrder.appliedPose) {
+    if (!slot.bone.active) continue
+    const pose = slot.appliedPose
+    const attachment = pose.attachment
+    if (pose.color.a <= 0 || skeleton.color.a <= 0) continue
+    let count: number
+    if (attachment instanceof RegionAttachment) {
+      if (attachment.color.a <= 0) continue
+      attachment.computeWorldVertices(slot, attachment.getOffsets(pose), verts, 0, 2)
+      count = 8
+    } else if (attachment instanceof MeshAttachment) {
+      if (attachment.color.a <= 0) continue
+      count = attachment.worldVerticesLength
+      if (verts.length < count) verts = new Float32Array(count)
+      attachment.computeWorldVertices(skeleton, slot, 0, count, verts, 0, 2)
+    } else continue
+    for (let i = 0; i < count; i += 2) {
+      // World y-up → root-relative y-down.
+      const x = verts[i] - bone.x
+      const y = bone.y - verts[i + 1]
+      if (x < x0) x0 = x
+      if (x > x1) x1 = x
+      if (y < y0) y0 = y
+      if (y > y1) y1 = y
+    }
+  }
+  if (!Number.isFinite(x0 + x1 + y0 + y1)) return null
+  return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 }
+}
+
+export type MeasureResult = {
+  /** Union of the visible bounds over the measured frames (null: nothing visible) */
+  union: Box | null
+  frames: { frame: number; bounds: Box | null }[]
+}
+
+/** Visible attachment bounds of the given frames of an animation ('' = setup pose). */
+export function measureSpineBounds(
+  source: SpineSource,
+  animationName: string,
+  frames: number[],
+  fps: number,
+): Promise<MeasureResult> {
+  return serialized(async () => {
+    const g = getGpu()
+    const { skeletonData } = await getPrepared(g, source)
+    const bone = setupRootWorld(skeletonData)
+    let union: Box | null = null
+    const out: MeasureResult['frames'] = []
+    for (const frame of frames) {
+      const bounds = visibleBounds(posedSkeleton(skeletonData, { animationName, frame, fps }), bone)
+      out.push({ frame, bounds })
+      if (!bounds) continue
+      if (!union) union = { ...bounds }
+      else {
+        const x = Math.min(union.x, bounds.x)
+        const y = Math.min(union.y, bounds.y)
+        union = {
+          x,
+          y,
+          width: Math.max(union.x + union.width, bounds.x + bounds.width) - x,
+          height: Math.max(union.y + union.height, bounds.y + bounds.height) - y,
+        }
+      }
+    }
+    return { union, frames: out }
+  })
+}
+
 export type PreviewResult = {
   canvas: HTMLCanvasElement
   /** Area shown by the canvas, in root-bone-relative pixels (x right, y down) */

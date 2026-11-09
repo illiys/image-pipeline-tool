@@ -15,6 +15,7 @@ npm run dev        # Vite dev server
 npm run build      # tsc -b (type check) + vite build → dist/
 npm run lint       # oxlint (config: .oxlintrc.json)
 npm run preview    # serve built dist
+npm run mcp        # MCP server over stdio (normally started by the MCP client, not by hand)
 ```
 
 There is no test suite; `npm run build` is the type-check gate.
@@ -91,9 +92,18 @@ There is no test suite; `npm run build` is the type-check gate.
 - Spine sources are rebuilt with `sourceFromFiles` (shared with uploads). Variants store `variantOf` and reuse their original's source on open; shared files are stored once. `own`/`variantOf` are optional in the manifest; older projects' `size` is migrated into `own` on open. Bump `FORMAT_VERSION` when the manifest changes incompatibly.
 
 ### App flow (`src/tools/SpineTool.tsx`)
+- Symbol-list operations (upload merge/re-source, variants, removal with variants, paste, own sections) are pure functions in `lib/symbolOps.ts`, shared with the automation engine.
 - Symbols and outputs live in refs (the source of truth for async code) that are mirrored to state.
 - A debounced effect (250 ms) renders stale outputs, selected symbol first; any newer change cancels the pass.
 - "Rendering" is derived, not stored: a symbol is pending while its output keys differ from the wanted keys, so it cannot get stuck.
 - Revoke object URLs only for images that are not carried over between outputs (`revokeUnshared`).
 
 `config/release.ts` `APP_VERSION` is shown in the header. Bump it together with `package.json` `version`.
+
+### Automation: MCP server (`mcp/`, `src/agent/`)
+- `mcp/server.ts` is an MCP server (stdio) that lets an agent create/open/save `.ssproj` projects, add Spine exports from disk, set keys/history/animation/frame/roots/own settings, add variants, preview, measure and export (ZIP or straight into a folder). Registered for Claude Code at user scope as `spine-symbols` (`claude mcp add -s user spine-symbols -- node <repo>/mcp/server.ts`). Run directly by Node 24 (type stripping): only erasable TS, imports with `.ts`.
+- **Engine page:** `mcp/page.html` → `src/agent/main.ts` exposes `window.__ssp` (`EngineApi` in `src/agent/protocol.ts`). It is a headless counterpart of a project tab built on the same modules (upload, `symbolOps`, `renderSymbolOutputs`, `buildExportBundle`, `project.ts`); no React. Projects live only in that page.
+- **Host (`mcp/host.ts`):** builds the engine page with Vite into `node_modules/.cache/ssp-mcp/<source mtime>/` when `src/`, `mcp/page.html`, `vite.config.ts` or `package-lock.json` changed, serves it on 127.0.0.1 and opens it in headless Chrome (`playwright-core`, system Chrome; `SSP_CHROME_PATH` / `SSP_CHROME_CHANNEL` override, `SSP_HEADED=1` shows the window). Started lazily on the first tool call; restarted after a crash (open projects are lost).
+- **File transfer:** the page reads local files only through the intercepted `/__ssp/fs?p=` URL, and only paths a tool call offered (`EngineHost.offer`). Outputs (.ssproj, export files) come back as page blobs pulled in base64 chunks (`readBlob`).
+- `src/agent/` is type-checked with the app; `mcp/` with `tsconfig.node.json` (no DOM: code evaluated in the page is passed as strings). `src/agent/protocol.ts` must stay free of DOM types since both sides import it.
+- Tool output: `preview_skeleton` returns an annotated image (grid in root-bone px, root guides, static frame, cell) plus the view mapping; `measure_bounds` returns visible-attachment bounds (`measureSpineBounds` in `renderer.ts`) and the root that centers them.

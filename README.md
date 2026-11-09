@@ -17,6 +17,18 @@ npm install
 npm run dev
 ```
 
+## Automation (MCP)
+
+`mcp/server.ts` is an MCP server (stdio) for AI agents: it creates and opens `.ssproj` projects, adds Spine exports from disk, sets roots/frames/ids, previews skeletons, renders outputs and exports (ZIP or straight into a folder). It runs the app's own rendering code in headless Google Chrome, so results match the web app. Requires Node 24 and Google Chrome (or `SSP_CHROME_PATH`).
+
+Add it to an MCP client as a stdio server:
+
+```bash
+node /path/to/image-pipeline-tool/mcp/server.ts
+```
+
+`SSP_HEADED=1` shows the browser window.
+
 ## Deploy
 
 ### Vercel
