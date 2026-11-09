@@ -6,6 +6,8 @@ export type ParamDef = {
   step: number
   unit?: string
   hint?: string
+  /** Shown as a range slider with the value next to it */
+  slider?: boolean
 }
 
 export type SpineAnimationInfo = {
@@ -78,6 +80,10 @@ export type GlobalSettings = {
   /** Game cell drawn centered in the static frame on the Spine preview (guide only; 0 = hidden) */
   cellWidth: number
   cellHeight: number
+  /** Spine render quality 0–100: render scale from 1× (0) to the full auto scale (100) */
+  quality: number
+  /** Unsharp mask on the static frame after the reduction */
+  sharpenPercent: number
 }
 
 export type OutputKind = 'static' | 'blur' | 'history'
@@ -89,9 +95,21 @@ export type OutputImage = {
   height: number
 }
 
+/** How a static frame was rendered (shown under the outputs). */
+export type RenderInfo = {
+  /** Texture pixels per output pixel (4 = textures are 4× the static image) */
+  textureDensity: number
+  /** Scale the frame was rendered at before the reduction */
+  renderScale: number
+  /** Rendered into a 16-bit float buffer (else 8-bit) */
+  floatBuffer: boolean
+}
+
 export type SymbolOutputs = {
   /** Keys the outputs were rendered for; stale when they differ from the wanted keys */
   keys: Record<OutputKind, string>
   images: Partial<Record<OutputKind, OutputImage>>
   error: string | null
+  /** Render details of the static frame (null until it was rendered) */
+  render: RenderInfo | null
 }

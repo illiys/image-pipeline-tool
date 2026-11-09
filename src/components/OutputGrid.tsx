@@ -2,7 +2,7 @@ import { useState, type CSSProperties } from 'react'
 import { useOptimizedSize } from '../hooks/useOptimizedSize'
 import { formatSizeKb } from '../lib/formatSize'
 import { pixelStyle } from './frameStyles'
-import type { OutputImage, OutputKind, SymbolOutputs } from '../core/types'
+import type { OutputImage, OutputKind, RenderInfo, SymbolOutputs } from '../core/types'
 import { Spinner } from './Spinner'
 
 export function Tile({
@@ -168,6 +168,7 @@ export function OutputGrid({
           {outputs.error}
         </p>
       ) : null}
+      {outputs?.render ? <RenderNote info={outputs.render} /> : null}
       {/* All three at true pixel size (shrunk only if they do not fit) */}
       <div className="flex flex-wrap items-start gap-4">
         <Tile
@@ -194,5 +195,24 @@ export function OutputGrid({
         />
       </div>
     </div>
+  )
+}
+
+/** Below this, textures hold less detail than full-resolution art (e.g. atlas packed at 0.5). */
+const GOOD_TEXTURE_DENSITY = 3.5
+
+function RenderNote({ info }: { info: RenderInfo }) {
+  const low = info.textureDensity < GOOD_TEXTURE_DENSITY
+  return (
+    <p
+      className="text-[10px] text-muted"
+      title="Texture resolution relative to the static image. From about 4× on, fine details come out as sharp as from the original art; below that, export the atlas at a higher Texture Packer scale (the root bone's scale does not matter)."
+    >
+      <span className={low ? 'text-amber-600' : undefined}>
+        Textures {info.textureDensity.toFixed(1)}×{low ? ' · low-res atlas' : ''}
+      </span>
+      {' · '}rendered {info.renderScale.toFixed(2).replace(/\.?0+$/, '')}×
+      {info.floatBuffer ? ' · 16-bit' : ' · 8-bit'}
+    </p>
   )
 }

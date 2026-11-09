@@ -80,12 +80,30 @@ export function SettingsPanel({ settings, onChange, only, own }: Props) {
                     {def.label}
                     {def.unit ? `, ${def.unit}` : ''}
                   </span>
-                  <NumberField
-                    def={def}
-                    value={value(def.key)}
-                    onChange={(v) => change(def.key, v)}
-                    compact
-                  />
+                  {def.slider ? (
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <input
+                        type="range"
+                        min={def.min}
+                        max={def.max}
+                        step={def.step}
+                        value={value(def.key)}
+                        onChange={(e) => change(def.key, Number(e.target.value))}
+                        className="h-5 min-w-0 flex-1 accent-accent-dim"
+                        title={def.hint}
+                      />
+                      <span className="w-7 shrink-0 text-right font-mono text-[11px] tabular-nums">
+                        {value(def.key)}
+                      </span>
+                    </span>
+                  ) : (
+                    <NumberField
+                      def={def}
+                      value={value(def.key)}
+                      onChange={(v) => change(def.key, v)}
+                      compact
+                    />
+                  )}
                 </label>
               ))}
             </div>

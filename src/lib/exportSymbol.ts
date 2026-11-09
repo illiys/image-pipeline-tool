@@ -12,7 +12,7 @@ import type {
 import { historyThumbnail } from '../effects/history'
 import { motionBlur } from '../effects/motionBlur'
 import { verticalCenterSqueeze } from '../effects/squeeze'
-import { renderSpineFrame } from '../spine/renderer'
+import { renderSpineFrame, type FrameResult } from '../spine/renderer'
 
 export const OUTPUT_KINDS: readonly OutputKind[] = ['static', 'blur', 'history']
 
@@ -108,6 +108,8 @@ export function outputKeys(
     root.y,
     size.width,
     size.height,
+    s.quality,
+    s.sharpenPercent,
   ])
   return {
     static: staticKey,
@@ -134,7 +136,7 @@ export function revokeOutputs(outputs: SymbolOutputs | undefined) {
 }
 
 /** Last rendered static canvas per symbol, so blur/history changes skip the WebGL render. */
-const staticCanvasCache = new Map<string, { key: string; canvas: HTMLCanvasElement }>()
+const staticCanvasCache = new Map<string, { key: string; frame: FrameResult }>()
 
 export function forgetSymbolCache(name: string) {
   staticCanvasCache.delete(name)
@@ -162,23 +164,30 @@ export async function renderSymbolOutputs(
   }
 
   try {
+    // Render details carry over with a static image that is still current.
+    let render = prev?.keys.static === keys.static && !prev.error ? prev.render : null
     let staticCanvas: HTMLCanvasElement | null = null
-    const getStatic = async () => {
+    const getStatic = async (): Promise<HTMLCanvasElement> => {
       if (staticCanvas) return staticCanvas
       const cached = staticCanvasCache.get(symbol.name)
       if (cached?.key === keys.static) {
-        staticCanvas = cached.canvas
+        staticCanvas = cached.frame.canvas
+        render = cached.frame.info
         return staticCanvas
       }
-      staticCanvas = await renderSpineFrame(symbol.source, {
+      const frame = await renderSpineFrame(symbol.source, {
         width: settings.staticWidth,
         height: settings.staticHeight,
         animationName: symbol.animationName,
         frame: symbol.frame,
         fps: symbol.source.fps,
         root: rootFor(symbol),
+        quality: settings.quality / 100,
+        sharpen: settings.sharpenPercent / 100,
       })
-      staticCanvasCache.set(symbol.name, { key: keys.static, canvas: staticCanvas })
+      staticCanvasCache.set(symbol.name, { key: keys.static, frame })
+      staticCanvas = frame.canvas
+      render = frame.info
       check()
       return staticCanvas
     }
@@ -209,7 +218,7 @@ export async function renderSymbolOutputs(
       images[kind] = img
     }
     check()
-    return { keys, images, error: null }
+    return { keys, images, error: null, render }
   } catch (e) {
     for (const img of created) URL.revokeObjectURL(img.url)
     if (e instanceof Cancelled) throw e
@@ -217,6 +226,7 @@ export async function renderSymbolOutputs(
       keys,
       images: {},
       error: e instanceof Error ? e.message : String(e),
+      render: null,
     }
   }
 }

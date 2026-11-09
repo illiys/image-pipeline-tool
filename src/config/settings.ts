@@ -10,6 +10,8 @@ export const DEFAULT_SETTINGS: GlobalSettings = {
   historyScale: 1,
   cellWidth: 0,
   cellHeight: 0,
+  quality: 80,
+  sharpenPercent: 0,
 }
 
 export type SettingsSection = {
@@ -34,6 +36,32 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     params: [
       { key: 'cellWidth', label: 'Width', min: 0, max: 2048, step: 1, unit: 'px' },
       { key: 'cellHeight', label: 'Height', min: 0, max: 2048, step: 1, unit: 'px' },
+    ],
+  },
+  {
+    title: 'Quality',
+    description:
+      'The Spine frame is rendered larger, then reduced with Lanczos3 in linear light. At 100 the render scale follows the texture resolution (1.5× its density, at least 2×, up to 8×); at 0 it is 1×.',
+    params: [
+      {
+        key: 'quality',
+        label: 'Quality',
+        min: 0,
+        max: 100,
+        step: 1,
+        slider: true,
+        hint: 'Render scale from 1× (0) to the full auto scale (100). Lower = faster.',
+      },
+      {
+        key: 'sharpenPercent',
+        label: 'Sharpen',
+        min: 0,
+        max: 100,
+        step: 1,
+        unit: '%',
+        slider: true,
+        hint: 'Unsharp mask after the reduction. 0 = off.',
+      },
     ],
   },
   {

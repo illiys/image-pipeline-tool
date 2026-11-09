@@ -28,7 +28,7 @@ There is no test suite; `npm run build` is the type-check gate.
   - `name`: the skeleton file name, used as the unique key.
   - `key`: the symbol id, e.g. `09_14` → `symbol_09_14`.
   - `historyIds`: `null` means the ids are generated from the key's numbers (`09_14` → `9`, `14`).
-  - `own`: the symbol's own values for whole settings sections (static size, cell, blur, history); missing keys come from the project settings (`settingsFor`). Toggled per section with the "own" checkboxes in the general settings panel (`SettingsPanel` `own` prop), not in the inspector.
+  - `own`: the symbol's own values for whole settings sections (static size, cell, blur, history); missing keys come from the project settings (`settingsFor`). Sections: static size, cell, quality, blur, history. Toggled per section with the "own" checkboxes in the general settings panel (`SettingsPanel` `own` prop), not in the inspector.
   - `variantOf`: the original's `name` for a variant (+ Variant in the inspector), else `null`.
     - A variant shares the original's `SpineSource` object and starts as a copy of its settings, named `<name> (n)` with key `<key>_vn`. It is listed nested under the original.
     - It exports only static/blur/history (no `animations/` folder). Its `historyIds: null` means none, not ids from the key.
@@ -43,22 +43,24 @@ There is no test suite; `npm run build` is the type-check gate.
     - Frames are drawn straight into an HTML canvas layered under the SVG. It is positioned with the same mapping as the SVG `viewBox`, because Safari ignores `viewBox` transforms for `foreignObject`. Frames render at the on-screen resolution (× devicePixelRatio) in power-of-two steps.
     - ▶ plays the animation locally at its fps (latest-only rendering); pausing commits the shown frame to the symbol.
   - Copy / Paste / Paste to all (inspector) copy a symbol's `root`, `animRoots` (pasted only for animations the target has), and `own`.
-- `GlobalSettings` (`config/settings.ts`) holds the project's static size, the game cell size (a guide drawn centered in the static frame on the preview; not exported; 0 = hidden), the blur params (squeeze, angle, distance) and the history params (max side, image scale). It is persisted in localStorage. `SETTINGS_SECTIONS` drives the settings UI and clamping.
+- `GlobalSettings` (`config/settings.ts`) holds the project's static size, the game cell size (a guide drawn centered in the static frame on the preview; not exported; 0 = hidden), the quality params (quality 0–100, sharpen), the blur params (squeeze, angle, distance) and the history params (max side, image scale). It is persisted in localStorage. `SETTINGS_SECTIONS` drives the settings UI and clamping.
 
 ### Spine (`src/spine/`)
 - `lib/dropFiles.ts`: dropped folders are walked recursively (`webkitGetAsEntry`), and the folder picker uses `webkitdirectory`. Relative paths are kept in a WeakMap (`filePath`), and junk files (`.DS_Store`, `__MACOSX`) are skipped.
 - `upload.ts` `parseSpineUpload`: unzips while keeping folder paths. It makes one symbol per `.json`/`.skel`, and the atlas is matched in the same folder first. Errors are collected per symbol, so valid symbols still load. Same-named skeletons from different folders get the first differing folder as a prefix (`desktop_symbol_01`, `mobile_symbol_01`).
 - `renderer.ts`: there is one shared WebGL context for the whole app, because browsers force-lose contexts beyond about 16. Atlas, GPU textures and skeleton data are cached per `SpineSource`; release them with `releaseSpineSource`. Renders are serialized.
-  - Additive slots: the runtime's default `pmaAdditiveBatching` adds color without alpha. `readFrame` reads the framebuffer and sets alpha = max(a, r, g, b), so a glow becomes semi-transparent and an additive texture's black background (e.g. JPG pages) stays transparent. Turning `pmaAdditiveBatching` off makes those backgrounds render black.
+  - Additive slots: the runtime's default `pmaAdditiveBatching` adds color without alpha. `readFrame` (preview) and `framebufferRows` (export) set alpha = max(a, r, g, b) on readback, so a glow becomes semi-transparent and an additive texture's black background (e.g. JPG pages) stays transparent. Turning `pmaAdditiveBatching` off makes those backgrounds render black.
   - `twoColorTint` is on (tint black); PMA is handled per texture by `GLTexture`.
-  - `renderSpineFrame` renders the export canvas, supersampled: up to 4× within GPU limits and about 16 Mpx. `readFrame` box-downsamples it in premultiplied space.
+  - `renderSpineFrame` renders the export canvas larger, then reduces it with Lanczos3 in linear light (`effects/resample.ts`), optionally unsharp-masks it and dithers the 8-bit output.
+    - Render scale: Quality (0–100) goes from 1× to the full scale, which is 1.5× the skeleton's texture density (texels per world unit from attachment triangle areas), at least 2×, at most 8×, within GPU limits and about 16 Mpx. A filter margin is rendered around the frame.
+    - It draws into a multisampled RGBA16F framebuffer when WebGL2 + `EXT_color_buffer_float` allow (else the 8-bit canvas) and reads it back in row bands.
+    - It returns `RenderInfo` (texture density, render scale, 16/8-bit), shown under the outputs; textures below ~3.5× are flagged as a low-res atlas.
   - Atlas textures use trilinear filtering with mipmaps.
   - `renderSpinePreview` renders the whole skeleton (bounds plus root bone) for the root editor, without supersampling, for speed.
-  - History thumbnails are downscaled in halving steps.
 - `skeletonData.ts`: shared skeleton loading and frame math. Frames run 0..floor(duration·fps), so an animation's end pose is reachable.
 
 ### Export (`src/lib/`, `src/effects/`)
-- `exportSymbol.ts` builds one key per output (`static`, `blur`, `history`), and only stale outputs are re-rendered. The Spine frame is rendered once per static key and cached. `effects/` derive blur (squeeze + motion blur) and history (fit to max side, then zoom by image scale) from it.
+- `exportSymbol.ts` builds one key per output (`static`, `blur`, `history`), and only stale outputs are re-rendered. The Spine frame is rendered once per static key and cached. `effects/` derive blur (squeeze + motion blur) and history (fit to max side, then zoom by image scale; Lanczos3) from it.
 - `exportBundle.ts` builds the ZIP layout:
   - `animations/symbol_XX/` (original skeleton and atlas renamed to `symbol_XX.*`; textures keep their atlas page names)
   - `symbols/big/symbol_XX.png`
