@@ -10,6 +10,11 @@ export function filePath(file: File): string {
   return paths.get(file) ?? (file.webkitRelativePath || file.name)
 }
 
+/** Gives a file its path inside a drop (files handed in by automation, see src/agent). */
+export function setFilePath(file: File, path: string) {
+  paths.set(file, path)
+}
+
 /** macOS/OS junk: hidden files, __MACOSX, Thumbs.db */
 export function isJunkPath(path: string): boolean {
   return path

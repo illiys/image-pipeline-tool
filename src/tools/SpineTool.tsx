@@ -6,13 +6,7 @@ import { SettingsPanel } from '../components/SettingsPanel'
 import { SpinePreview } from '../components/SpinePreview'
 import { SymbolInspector } from '../components/SymbolInspector'
 import { SymbolList } from '../components/SymbolList'
-import type {
-  OutputKind,
-  RootOffset,
-  SpineSource,
-  SpineSymbol,
-  SymbolOutputs,
-} from '../core/types'
+import type { OutputKind, RootOffset, SpineSymbol, SymbolOutputs } from '../core/types'
 import { useConfirm } from '../hooks/useConfirm'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useMediaQuery } from '../hooks/useMediaQuery'
@@ -24,51 +18,29 @@ import {
   forgetSymbolCache,
   OUTPUT_KINDS,
   outputKeys,
-  suggestKey,
   outputPaths,
   outputsAreCurrent,
   renderSymbolOutputs,
   revokeOutputs,
+  revokeUnshared,
   rootFor,
   sizeFor,
   symbolSlug,
 } from '../lib/exportSymbol'
+import {
+  addVariant as variantOf,
+  clampFrame,
+  mergeUpload,
+  pasteSymbolSettings,
+  setOwnSection,
+  withVariants,
+  type SymbolSettingsCopy,
+} from '../lib/symbolOps'
 import { releaseSpineSource } from '../spine/renderer'
-import { maxFrameIndex } from '../spine/skeletonData'
 import { parseSpineUpload, SPINE_UPLOAD_ACCEPT } from '../spine/upload'
 
 import { isProjectFile } from '../lib/project'
 import { DEBOUNCE_MS, HeaderActions, ToolMessages, type ToolProps } from './shared'
-
-type SymbolSettingsCopy = Pick<SpineSymbol, 'root' | 'animRoots' | 'own'> & { from: string }
-
-/** Revoke images of `next` that `prev` does not share (and vice versa when `next` replaces `prev`). */
-function revokeUnshared(drop: SymbolOutputs | undefined, keep: SymbolOutputs | undefined) {
-  if (!drop) return
-  const kept = new Set(Object.values(keep?.images ?? {}).map((i) => i.url))
-  for (const img of Object.values(drop.images)) {
-    if (!kept.has(img.url)) URL.revokeObjectURL(img.url)
-  }
-}
-
-/** The symbol on a new Spine source: root/animation/frame kept where still valid. */
-function withSource(symbol: SpineSymbol, source: SpineSource): SpineSymbol {
-  const animations = source.animations
-  const animationName = animations.some((a) => a.name === symbol.animationName)
-    ? symbol.animationName
-    : (animations[0]?.name ?? '')
-  const animRoots = Object.fromEntries(
-    Object.entries(symbol.animRoots).filter(([a]) => animations.some((x) => x.name === a)),
-  )
-  const updated = { ...symbol, source, animationName, animRoots }
-  return { ...updated, frame: clampFrame(updated, animationName, symbol.frame) }
-}
-
-function clampFrame(symbol: SpineSymbol, animationName: string, frame: number): number {
-  const anim = symbol.source.animations.find((a) => a.name === animationName)
-  if (!anim) return 0
-  return Math.min(Math.max(0, Math.round(frame)), maxFrameIndex(anim.duration, symbol.source.fps))
-}
 
 /** Spine exports → static (big), blur and history per symbol, plus the animation files. */
 /** Lets the app save/open projects without owning the tool's state. */
@@ -204,45 +176,11 @@ export function SpineTool({
       setMessages([])
       try {
         const { symbols: parsed, errors } = await parseSpineUpload(files)
-        const byName = new Map(symbolsRef.current.map((s) => [s.name, s]))
-        let firstName: string | null = null
-        for (const p of parsed) {
-          let name = p.name
-          // A variant's name ('x (2)') is not a re-upload: the skeleton is added under a free name.
-          if (byName.get(name)?.variantOf != null) {
-            let n = 2
-            while (byName.has(`${p.name} (${n})`)) n++
-            name = `${p.name} (${n})`
-          }
-          firstName ??= name
-          const old = byName.get(name)
-          const animations = p.source.animations
-          if (old) {
-            // Re-upload: new source for the symbol and its variants, settings kept where valid.
-            dropSymbolResources(old)
-            for (const s of byName.values()) {
-              if (s.name === p.name || s.variantOf === p.name) byName.set(s.name, withSource(s, p.source))
-            }
-          } else {
-            byName.set(name, {
-              name,
-              key: suggestKey(
-                p.name,
-                Array.from(byName.values(), (s) => s.key),
-              ),
-              historyIds: null,
-              own: {},
-              variantOf: null,
-              source: p.source,
-              animationName: animations[0]?.name ?? '',
-              frame: 0,
-              root: { x: 0, y: 0 },
-              animRoots: {},
-            })
-          }
-        }
-        setSymbols(Array.from(byName.values()))
-        if (!selectedRef.current && firstName) setSelectedName(firstName)
+        const merged = mergeUpload(symbolsRef.current, parsed)
+        // Re-upload: the old source is released; the symbol and its variants use the new one.
+        for (const old of merged.replaced) dropSymbolResources(old)
+        setSymbols(merged.symbols)
+        if (!selectedRef.current && merged.firstName) setSelectedName(merged.firstName)
         setMessages(errors)
       } catch (e) {
         setMessages([e instanceof Error ? e.message : 'Upload failed'])
@@ -263,10 +201,7 @@ export function SpineTool({
   /** Removing an original removes its variants too (they use its Spine files). */
   const removeSymbols = useCallback(
     (removed: Set<string>) => {
-      const names = new Set(removed)
-      for (const s of symbolsRef.current) {
-        if (s.variantOf != null && names.has(s.variantOf)) names.add(s.name)
-      }
+      const names = withVariants(symbolsRef.current, removed)
       const nextOutputs = { ...outputsRef.current }
       for (const s of symbolsRef.current) {
         if (!names.has(s.name)) continue
@@ -302,30 +237,11 @@ export function SpineTool({
     [removeSymbols, setSymbols],
   )
 
-  /**
-   * A copy of the symbol on the same Spine source, with all its settings. Placed after
-   * the original and its other variants; history ids start empty.
-   */
   const addVariant = (name: string) => {
-    const all = symbolsRef.current
-    const original = all.find((s) => s.name === name)
-    if (!original) return
-    const names = new Set(all.map((s) => s.name))
-    const keys = new Set(all.map((s) => s.key.toLowerCase()))
-    let n = 2
-    while (names.has(`${name} (${n})`) || keys.has(`${original.key}_v${n}`.toLowerCase())) n++
-    const variant: SpineSymbol = {
-      ...structuredClone({ ...original, source: null }),
-      source: original.source,
-      name: `${name} (${n})`,
-      key: `${original.key}_v${n}`,
-      historyIds: null,
-      variantOf: name,
-    }
-    let at = all.findIndex((s) => s.name === name) + 1
-    while (all[at]?.variantOf === name) at++
-    setSymbols([...all.slice(0, at), variant, ...all.slice(at)])
-    setSelectedName(variant.name)
+    const result = variantOf(symbolsRef.current, name)
+    if (!result) return
+    setSymbols(result.symbols)
+    setSelectedName(result.variant.name)
   }
 
   const setAnimation = (animationName: string) => {
@@ -348,7 +264,7 @@ export function SpineTool({
   }
 
   /** Copied symbol settings (root, per-animation roots, own size) */
-  const [clipboard, setClipboard] = useState<SymbolSettingsCopy | null>(null)
+  const [clipboard, setClipboard] = useState<(SymbolSettingsCopy & { from: string }) | null>(null)
 
   const copySettings = () => {
     if (!selected) return
@@ -364,22 +280,7 @@ export function SpineTool({
   const pasteSettings = (names: string[]) => {
     if (!clipboard) return
     const targets = new Set(names)
-    setSymbols(
-      symbolsRef.current.map((s) => {
-        if (!targets.has(s.name)) return s
-        const animRoots = Object.fromEntries(
-          Object.entries(clipboard.animRoots).filter(([a]) =>
-            s.source.animations.some((x) => x.name === a),
-          ),
-        )
-        return {
-          ...s,
-          root: { ...clipboard.root },
-          animRoots,
-          own: { ...clipboard.own },
-        }
-      }),
-    )
+    setSymbols(symbolsRef.current.map((s) => (targets.has(s.name) ? pasteSymbolSettings(s, clipboard) : s)))
   }
 
   /** Own root for the current animation (starts from the shared root) or back to shared. */
@@ -476,14 +377,10 @@ export function SpineTool({
                 label: symbolSlug(selected.key),
                 values: selected.own,
                 onToggle: (section, on) =>
-                  updateSymbol(selected.name, (s) => {
-                    const own = { ...s.own }
-                    for (const p of section.params) {
-                      if (on) own[p.key] = settings[p.key]
-                      else delete own[p.key]
-                    }
-                    return { ...s, own }
-                  }),
+                  updateSymbol(selected.name, (s) => ({
+                    ...s,
+                    own: setOwnSection(s.own, section, on, settings),
+                  })),
                 onChange: (key, value) =>
                   updateSymbol(selected.name, (s) => ({ ...s, own: { ...s.own, [key]: value } })),
               }

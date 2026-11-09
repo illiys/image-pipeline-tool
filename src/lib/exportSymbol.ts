@@ -135,6 +135,15 @@ export function revokeOutputs(outputs: SymbolOutputs | undefined) {
   for (const img of Object.values(outputs.images)) URL.revokeObjectURL(img.url)
 }
 
+/** Revoke images of `drop` that `keep` does not share (keep = the outputs replacing them). */
+export function revokeUnshared(drop: SymbolOutputs | undefined, keep: SymbolOutputs | undefined) {
+  if (!drop) return
+  const kept = new Set(Object.values(keep?.images ?? {}).map((i) => i.url))
+  for (const img of Object.values(drop.images)) {
+    if (!kept.has(img.url)) URL.revokeObjectURL(img.url)
+  }
+}
+
 /** Last rendered static canvas per symbol, so blur/history changes skip the WebGL render. */
 const staticCanvasCache = new Map<string, { key: string; frame: FrameResult }>()
 
